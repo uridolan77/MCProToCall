@@ -45,6 +45,27 @@ namespace ModelContextProtocol.Extensions.Security
         public List<string> AllowedClientCertificateThumbprints { get; set; } = new List<string>();
 
         /// <summary>
+        /// Whether to allow untrusted certificates (should only be used in development)
+        /// </summary>
+        public bool AllowUntrustedCertificates { get; set; } = false;
+
+        /// <summary>
+        /// Whether to allow self-signed certificates
+        /// </summary>
+        public bool AllowSelfSignedCertificates { get; set; } = false;
+
+        /// <summary>
+        /// List of hostnames to trust even if the certificate doesn't match
+        /// This should only be used in specific scenarios where hostname validation isn't possible
+        /// </summary>
+        public List<string> TrustedHostOverrides { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Minimum TLS version to accept (e.g., "1.2", "1.3")
+        /// </summary>
+        public string MinimumTlsVersion { get; set; } = "1.2";
+
+        /// <summary>
         /// Certificate pinning options
         /// </summary>
         public CertificatePinningOptions CertificatePinning { get; set; } = new CertificatePinningOptions();
