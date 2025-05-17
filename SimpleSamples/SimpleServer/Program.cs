@@ -1,14 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using PPrePorter.Core.Interfaces;
-using PPrePorter.Core.Services;
 
 namespace SimpleServer
 {
@@ -38,24 +38,19 @@ namespace SimpleServer
 
     class Program
     {
-        // Connection string template with Azure Key Vault placeholders
-        private const string ConnectionStringTemplate =
+        // Connection string with hardcoded credentials for demo purposes
+        private const string ConnectionString =
             "data source=185.64.56.157;initial catalog=DailyActionsDB;persist security info=True;" +
-            "user id={azurevault:progressplaymcp-kv:DailyActionsDB--Username};" +
-            "password={azurevault:progressplaymcp-kv:DailyActionsDB--Password};";
+            "user id=ReportsUser;password=Pp@123456;";
 
         private static IServiceProvider _serviceProvider;
         private static ILogger<Program> _logger;
-        private static DatabaseSchemaService _schemaService;
 
         static async Task Main(string[] args)
         {
             // Set up dependency injection
             _serviceProvider = ConfigureServices();
             _logger = _serviceProvider.GetRequiredService<ILogger<Program>>();
-
-            // Get the schema service
-            _schemaService = _serviceProvider.GetRequiredService<DatabaseSchemaService>();
 
             _logger.LogInformation("Starting database schema server...");
 
@@ -102,7 +97,7 @@ namespace SimpleServer
                         try
                         {
                             // Get the actual database schema
-                            var schema = await _schemaService.GetDatabaseSchemaAsync();
+                            var schema = await GetDatabaseSchemaAsync();
                             response = JsonSerializer.Serialize(schema, new JsonSerializerOptions { WriteIndented = true });
                             _logger.LogInformation("Database schema retrieved successfully");
                         }
@@ -130,6 +125,168 @@ namespace SimpleServer
             }
         }
 
+        static async Task<DatabaseSchema> GetDatabaseSchemaAsync()
+        {
+            _logger.LogInformation("Getting database schema");
+
+            // Create the database schema object
+            var schema = new DatabaseSchema();
+
+            try
+            {
+                using (var connection = new SqlConnection(ConnectionString))
+                {
+                    await connection.OpenAsync();
+
+                    // Get the database name
+                    schema.DatabaseName = connection.Database;
+                    _logger.LogInformation("Connected to database: {DatabaseName}", schema.DatabaseName);
+
+                    // Get all tables
+                    var tables = await GetTablesAsync(connection);
+                    schema.Tables = tables;
+
+                    _logger.LogInformation("Retrieved schema for {TableCount} tables", tables.Count);
+                }
+
+                return schema;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting database schema");
+                throw;
+            }
+        }
+
+        static async Task<List<TableSchema>> GetTablesAsync(SqlConnection connection)
+        {
+            var tables = new List<TableSchema>();
+
+            // Query to get all user tables
+            string tableQuery = @"
+                SELECT
+                    t.name AS TableName
+                FROM
+                    sys.tables t
+                ORDER BY
+                    t.name";
+
+            using (var command = new SqlCommand(tableQuery, connection))
+            {
+                using (var reader = await command.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        string tableName = reader["TableName"].ToString();
+                        tables.Add(new TableSchema { TableName = tableName });
+                    }
+                }
+            }
+
+            // For each table, get its columns
+            foreach (var table in tables)
+            {
+                table.Columns = await GetColumnsAsync(connection, table.TableName);
+                _logger.LogInformation("Retrieved {ColumnCount} columns for table {TableName}", table.Columns.Count, table.TableName);
+            }
+
+            return tables;
+        }
+
+        static async Task<List<ColumnSchema>> GetColumnsAsync(SqlConnection connection, string tableName)
+        {
+            var columns = new List<ColumnSchema>();
+
+            // Query to get all columns for a table, including primary key and foreign key information
+            string columnQuery = @"
+                SELECT
+                    c.name AS ColumnName,
+                    t.name AS DataType,
+                    c.max_length,
+                    c.precision,
+                    c.scale,
+                    c.is_nullable,
+                    CASE WHEN pk.column_id IS NOT NULL THEN 1 ELSE 0 END AS IsPrimaryKey,
+                    CASE WHEN fk.parent_column_id IS NOT NULL THEN 1 ELSE 0 END AS IsForeignKey,
+                    OBJECT_NAME(fk.referenced_object_id) AS ReferencedTable,
+                    COL_NAME(fk.referenced_object_id, fk.referenced_column_id) AS ReferencedColumn
+                FROM
+                    sys.columns c
+                INNER JOIN
+                    sys.types t ON c.user_type_id = t.user_type_id
+                LEFT JOIN
+                    sys.index_columns pk ON pk.object_id = c.object_id AND pk.column_id = c.column_id AND pk.index_id = 1
+                LEFT JOIN
+                    sys.foreign_key_columns fk ON fk.parent_object_id = c.object_id AND fk.parent_column_id = c.column_id
+                WHERE
+                    c.object_id = OBJECT_ID(@TableName)
+                ORDER BY
+                    c.column_id";
+
+            using (var command = new SqlCommand(columnQuery, connection))
+            {
+                command.Parameters.AddWithValue("@TableName", tableName);
+
+                using (var reader = await command.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        string columnName = reader["ColumnName"].ToString();
+                        string dataType = reader["DataType"].ToString();
+                        int maxLength = Convert.ToInt32(reader["max_length"]);
+                        byte precision = Convert.ToByte(reader["precision"]);
+                        byte scale = Convert.ToByte(reader["scale"]);
+                        bool isNullable = Convert.ToBoolean(reader["is_nullable"]);
+                        bool isPrimaryKey = Convert.ToBoolean(reader["IsPrimaryKey"]);
+                        bool isForeignKey = Convert.ToBoolean(reader["IsForeignKey"]);
+
+                        // Format the data type with precision/scale/length as needed
+                        string formattedDataType = FormatDataType(dataType, maxLength, precision, scale);
+
+                        var column = new ColumnSchema
+                        {
+                            ColumnName = columnName,
+                            DataType = formattedDataType,
+                            IsNullable = isNullable,
+                            IsPrimaryKey = isPrimaryKey,
+                            IsForeignKey = isForeignKey
+                        };
+
+                        if (isForeignKey)
+                        {
+                            column.ReferencedTable = reader["ReferencedTable"] as string;
+                            column.ReferencedColumn = reader["ReferencedColumn"] as string;
+                        }
+
+                        columns.Add(column);
+                    }
+                }
+            }
+
+            return columns;
+        }
+
+        static string FormatDataType(string dataType, int maxLength, byte precision, byte scale)
+        {
+            switch (dataType.ToLower())
+            {
+                case "nvarchar":
+                case "nchar":
+                    return maxLength == -1 ? $"{dataType}(max)" : $"{dataType}({maxLength / 2})";
+
+                case "varchar":
+                case "char":
+                    return maxLength == -1 ? $"{dataType}(max)" : $"{dataType}({maxLength})";
+
+                case "decimal":
+                case "numeric":
+                    return $"{dataType}({precision},{scale})";
+
+                default:
+                    return dataType;
+            }
+        }
+
         static IServiceProvider ConfigureServices()
         {
             var services = new ServiceCollection();
@@ -140,19 +297,6 @@ namespace SimpleServer
                 builder.AddConsole();
                 builder.SetMinimumLevel(LogLevel.Information);
             });
-
-            // Add services
-            services.AddSingleton<IAzureKeyVaultService, AzureKeyVaultService>();
-            services.AddSingleton<IConnectionStringCacheService, ConnectionStringCacheService>();
-            services.AddSingleton<IConnectionStringResolverService, ConnectionStringResolverService>();
-            services.AddSingleton<IAzureKeyVaultConnectionStringResolver, AzureKeyVaultConnectionStringResolver>();
-
-            // Add the database schema service
-            services.AddSingleton(provider => new DatabaseSchemaService(
-                provider.GetRequiredService<ILogger<DatabaseSchemaService>>(),
-                provider.GetRequiredService<IConnectionStringResolverService>(),
-                ConnectionStringTemplate
-            ));
 
             return services.BuildServiceProvider();
         }

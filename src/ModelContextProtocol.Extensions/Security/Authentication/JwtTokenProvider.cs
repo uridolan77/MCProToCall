@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using ModelContextProtocol.Server.Security.Authentication;
 
 namespace ModelContextProtocol.Extensions.Security.Authentication
 {
@@ -33,10 +34,10 @@ namespace ModelContextProtocol.Extensions.Security.Authentication
         {
             if (string.IsNullOrEmpty(userId))
                 throw new ArgumentNullException(nameof(userId));
-            
+
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(_options.SecretKey);
-            
+
             var tokenId = Guid.NewGuid().ToString();
             var claims = new List<Claim>
             {
@@ -44,7 +45,7 @@ namespace ModelContextProtocol.Extensions.Security.Authentication
                 new Claim(JwtRegisteredClaimNames.Jti, tokenId),
                 new Claim(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64)
             };
-            
+
             // Add roles
             if (roles != null)
             {
@@ -53,7 +54,7 @@ namespace ModelContextProtocol.Extensions.Security.Authentication
                     claims.Add(new Claim(ClaimTypes.Role, role));
                 }
             }
-            
+
             // Add additional claims
             if (additionalClaims != null)
             {
@@ -62,7 +63,7 @@ namespace ModelContextProtocol.Extensions.Security.Authentication
                     claims.Add(new Claim(claim.Key, claim.Value));
                 }
             }
-            
+
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Issuer = _options.Issuer,
@@ -73,7 +74,7 @@ namespace ModelContextProtocol.Extensions.Security.Authentication
                     new SymmetricSecurityKey(key),
                     SecurityAlgorithms.HmacSha256Signature)
             };
-            
+
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
         }
@@ -83,34 +84,41 @@ namespace ModelContextProtocol.Extensions.Security.Authentication
         {
             if (string.IsNullOrEmpty(userId))
                 throw new ArgumentNullException(nameof(userId));
-            
+
             // Generate a cryptographically strong random token
             var randomBytes = new byte[64];
             using var rng = RandomNumberGenerator.Create();
             rng.GetBytes(randomBytes);
-            
+
             var refreshToken = Convert.ToBase64String(randomBytes);
             var expiration = DateTime.UtcNow.AddDays(_options.RefreshTokenExpirationDays);
-            
+
             // Store the refresh token
             await _tokenStore.StoreRefreshTokenAsync(refreshToken, userId, expiration);
-            
+
             return (refreshToken, expiration);
         }
 
         /// <inheritdoc />
         public async Task<bool> ValidateTokenAsync(string token)
         {
+            var principal = await ValidateTokenAndGetPrincipalAsync(token);
+            return principal != null;
+        }
+
+        /// <inheritdoc />
+        public async Task<ClaimsPrincipal> ValidateTokenAndGetPrincipalAsync(string token)
+        {
             if (string.IsNullOrEmpty(token))
-                return false;
-            
+                return null;
+
             try
             {
                 var tokenHandler = new JwtSecurityTokenHandler();
                 var key = Encoding.ASCII.GetBytes(_options.SecretKey);
-                
+
                 // Validate the token
-                tokenHandler.ValidateToken(token, new TokenValidationParameters
+                var principal = tokenHandler.ValidateToken(token, new TokenValidationParameters
                 {
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(key),
@@ -121,13 +129,13 @@ namespace ModelContextProtocol.Extensions.Security.Authentication
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.Zero // Zero tolerance for token expiration
                 }, out _);
-                
-                return true;
+
+                return principal;
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Token validation failed");
-                return false;
+                return null;
             }
         }
 
@@ -136,12 +144,12 @@ namespace ModelContextProtocol.Extensions.Security.Authentication
         {
             if (string.IsNullOrEmpty(token))
                 throw new ArgumentNullException(nameof(token));
-            
+
             try
             {
                 var tokenHandler = new JwtSecurityTokenHandler();
                 var jwtToken = tokenHandler.ReadJwtToken(token);
-                
+
                 return jwtToken.Claims.ToDictionary(
                     claim => claim.Type,
                     claim => claim.Value);
@@ -158,7 +166,7 @@ namespace ModelContextProtocol.Extensions.Security.Authentication
         {
             if (string.IsNullOrEmpty(refreshToken))
                 throw new ArgumentNullException(nameof(refreshToken));
-            
+
             // Validate the refresh token
             var userId = await _tokenStore.ValidateRefreshTokenAsync(refreshToken);
             if (string.IsNullOrEmpty(userId))
@@ -166,17 +174,17 @@ namespace ModelContextProtocol.Extensions.Security.Authentication
                 _logger.LogWarning("Invalid refresh token attempt");
                 throw new SecurityTokenException("Invalid refresh token");
             }
-            
+
             // Get user roles (in a real implementation, you'd retrieve these from your user store)
             var roles = new List<string> { "User" }; // Replace with actual user roles
-            
+
             // Generate new tokens
             var accessToken = await GenerateAccessTokenAsync(userId, roles);
             var (newRefreshToken, expiration) = await GenerateRefreshTokenAsync(userId);
-            
+
             // Invalidate the old refresh token (token rotation)
             await _tokenStore.RevokeRefreshTokenAsync(refreshToken);
-            
+
             return (accessToken, newRefreshToken, expiration);
         }
 
@@ -185,7 +193,7 @@ namespace ModelContextProtocol.Extensions.Security.Authentication
         {
             if (string.IsNullOrEmpty(refreshToken))
                 throw new ArgumentNullException(nameof(refreshToken));
-            
+
             await _tokenStore.RevokeRefreshTokenAsync(refreshToken);
         }
 
@@ -194,7 +202,7 @@ namespace ModelContextProtocol.Extensions.Security.Authentication
         {
             if (string.IsNullOrEmpty(userId))
                 throw new ArgumentNullException(nameof(userId));
-            
+
             await _tokenStore.RevokeAllUserTokensAsync(userId);
         }
     }
