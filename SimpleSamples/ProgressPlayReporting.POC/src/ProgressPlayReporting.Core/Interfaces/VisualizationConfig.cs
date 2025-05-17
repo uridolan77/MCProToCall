@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace ProgressPlayReporting.Core.Interfaces
+namespace ProgressPlayReporting.Core.Models.Visualization
 {
     /// <summary>
     /// Configuration for data visualization

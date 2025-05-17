@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using ProgressPlayReporting.Core.Interfaces;
+using ProgressPlayReporting.Core.Models.Visualization;
 
 namespace ProgressPlayReporting.LlmIntegration
 {
@@ -358,10 +359,16 @@ namespace ProgressPlayReporting.LlmIntegration
                     // Parse correlations
                     if (deserializedObj.TryGetProperty("correlations", out var correlationsElement) && 
                         correlationsElement.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var correlation in correlationsElement.EnumerateArray())
+                    {                        foreach (var correlation in correlationsElement.EnumerateArray())
                         {
-                            result.Correlations.Add(correlation.GetString());
+                            var correlationResult = new CorrelationResult
+                            {
+                                Variable1 = "Unknown",
+                                Variable2 = "Unknown",
+                                Coefficient = 0,
+                                Description = correlation.GetString() ?? "No description"
+                            };
+                            result.Correlations.Add(correlationResult);
                         }
                     }
                     

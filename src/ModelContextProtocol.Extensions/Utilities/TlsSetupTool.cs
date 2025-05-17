@@ -28,8 +28,8 @@ namespace ModelContextProtocol.Extensions.Utilities
         /// <param name="password">Password for certificates</param>
         /// <param name="validityDays">Number of days certificates are valid</param>
         public void GenerateCertificates(
-            string outputDir, 
-            string serverName, 
+            string outputDir,
+            string serverName,
             IEnumerable<string> clientNames,
             string password,
             int validityDays)
@@ -48,7 +48,7 @@ namespace ModelContextProtocol.Extensions.Utilities
                 serverCertPath,
                 _logger);
 
-            _logger.LogInformation("Generated server certificate: Subject={Subject}, Thumbprint={Thumbprint}", 
+            _logger.LogInformation("Generated server certificate: Subject={Subject}, Thumbprint={Thumbprint}",
                 serverCert.Subject, serverCert.Thumbprint);
 
             // Generate client certificates
@@ -59,7 +59,7 @@ namespace ModelContextProtocol.Extensions.Utilities
             {
                 string safeName = MakeSafeFilename(clientName);
                 string clientCertPath = Path.Combine(outputDir, $"client-{safeName}.pfx");
-                
+
                 var clientCert = CertificateHelper.CreateSelfSignedCertificate(
                     clientName,
                     validityDays,
@@ -70,7 +70,7 @@ namespace ModelContextProtocol.Extensions.Utilities
                 clientCerts.Add(clientCert);
                 clientThumbprints.Add(clientCert.Thumbprint);
 
-                _logger.LogInformation("Generated client certificate: Subject={Subject}, Thumbprint={Thumbprint}", 
+                _logger.LogInformation("Generated client certificate: Subject={Subject}, Thumbprint={Thumbprint}",
                     clientCert.Subject, clientCert.Thumbprint);
             }
 
@@ -80,9 +80,9 @@ namespace ModelContextProtocol.Extensions.Utilities
         }
 
         private void GenerateServerConfig(
-            string outputDir, 
-            string certPath, 
-            string password, 
+            string outputDir,
+            string certPath,
+            string password,
             List<string> clientThumbprints)
         {
             string configPath = Path.Combine(outputDir, "server-config.json");
@@ -106,8 +106,8 @@ namespace ModelContextProtocol.Extensions.Utilities
         }
 
         private void GenerateClientConfig(
-            string outputDir, 
-            List<X509Certificate2> clientCerts, 
+            string outputDir,
+            List<X509Certificate2> clientCerts,
             string password)
         {
             foreach (var cert in clientCerts)

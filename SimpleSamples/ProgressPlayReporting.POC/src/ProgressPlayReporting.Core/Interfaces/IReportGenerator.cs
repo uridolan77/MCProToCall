@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Data;
+using ProgressPlayReporting.Core.Models.Visualization;
 
 namespace ProgressPlayReporting.Core.Interfaces
 {
@@ -100,9 +101,7 @@ namespace ProgressPlayReporting.Core.Interfaces
         /// Correlations between variables
         /// </summary>
         public List<CorrelationResult> Correlations { get; set; } = new List<CorrelationResult>();
-    }
-
-    /// <summary>
+    }    /// <summary>
     /// Correlation between two variables
     /// </summary>
     public class CorrelationResult
@@ -126,47 +125,6 @@ namespace ProgressPlayReporting.Core.Interfaces
         /// Description of the correlation
         /// </summary>
         public string Description { get; set; }
-    }
-
-    /// <summary>
-    /// Configuration for a data visualization
-    /// </summary>
-    public class VisualizationConfig
-    {
-        /// <summary>
-        /// Title of the visualization
-        /// </summary>
-        public string Title { get; set; }
-        
-        /// <summary>
-        /// Type of chart (bar, line, pie, etc.)
-        /// </summary>
-        public string ChartType { get; set; }
-        
-        /// <summary>
-        /// X-axis configuration
-        /// </summary>
-        public AxisConfig XAxis { get; set; } = new AxisConfig();
-        
-        /// <summary>
-        /// Y-axis configuration
-        /// </summary>
-        public AxisConfig YAxis { get; set; } = new AxisConfig();
-        
-        /// <summary>
-        /// Data series to display
-        /// </summary>
-        public List<SeriesConfig> Series { get; set; } = new List<SeriesConfig>();
-        
-        /// <summary>
-        /// Additional options specific to chart type
-        /// </summary>
-        public Dictionary<string, object> Options { get; set; } = new Dictionary<string, object>();
-        
-        /// <summary>
-        /// Explanation of why this visualization was chosen
-        /// </summary>
-        public string Rationale { get; set; }
     }
 
     /// <summary>

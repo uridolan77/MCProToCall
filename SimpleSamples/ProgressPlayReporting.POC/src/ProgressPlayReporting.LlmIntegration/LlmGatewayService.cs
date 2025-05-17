@@ -132,12 +132,11 @@ namespace ProgressPlayReporting.LlmIntegration
                     {
                         case "top_p":
                             request.TopP = Convert.ToDouble(param.Value);
-                            break;
-                        case "n":
+                            break;                        case "n":
                             request.N = Convert.ToInt32(param.Value);
                             break;
                         case "stream":
-                            request.Stream = Convert.ToBoolean(param.Value);
+                            request.Stream = param.Value != null && Convert.ToBoolean(param.Value);
                             break;
                         // More parameters can be mapped here as needed
                     }

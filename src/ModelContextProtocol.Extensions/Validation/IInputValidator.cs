@@ -53,6 +53,16 @@ namespace ModelContextProtocol.Extensions.Validation
         public List<ValidationError> Errors { get; set; } = new List<ValidationError>();
 
         /// <summary>
+        /// Error code for JSON-RPC error responses
+        /// </summary>
+        public int ErrorCode { get; set; }
+
+        /// <summary>
+        /// Error message for JSON-RPC error responses
+        /// </summary>
+        public string ErrorMessage { get; set; }
+
+        /// <summary>
         /// Creates a successful validation result
         /// </summary>
         public static ValidationResult Success()

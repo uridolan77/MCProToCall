@@ -94,7 +94,7 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
 
             // Register token services
             services.AddSingleton<ITokenStore, InMemoryTokenStore>();
-            services.AddSingleton<IJwtTokenProvider, JwtTokenProvider>();
+            services.AddSingleton<ModelContextProtocol.Extensions.Security.Authentication.IJwtTokenProvider, ModelContextProtocol.Extensions.Security.Authentication.JwtTokenProvider>();
 
             return services;
         }
@@ -177,16 +177,16 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
             services.AddSingleton<IMcpServer, McpServer>();
 
             // Register security services
-            services.AddSingleton<ICertificateValidator, CertificateValidator>();
+            services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificateValidator, ModelContextProtocol.Extensions.Security.CertificateValidator>();
             services.AddSingleton<ICertificateRevocationChecker, CertificateRevocationChecker>();
-            services.AddSingleton<ICertificatePinningService, CertificatePinningService>();
-            services.AddSingleton(typeof(TlsConnectionManager));
+            services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificatePinningService, ModelContextProtocol.Extensions.Security.CertificatePinningService>();
+            services.AddSingleton(typeof(ModelContextProtocol.Extensions.Security.TlsConnectionManager));
 
             // Register authentication services if enabled
             var authEnabled = configuration.GetValue<bool>("McpServer:EnableAuthentication");
             if (authEnabled)
             {
-                services.AddSingleton<IJwtTokenProvider, JwtTokenProvider>();
+                services.AddSingleton<ModelContextProtocol.Extensions.Security.Authentication.IJwtTokenProvider, ModelContextProtocol.Extensions.Security.Authentication.JwtTokenProvider>();
                 services.AddSingleton<ITokenStore, InMemoryTokenStore>();
                 services.AddSingleton<AuthorizationMiddleware>();
                 services.AddSingleton<IInputValidator>(provider =>
@@ -213,10 +213,10 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
             services.AddSingleton<IMcpServer, McpServer>();
 
             // Register security services
-            services.AddSingleton<ICertificateValidator, CertificateValidator>();
+            services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificateValidator, ModelContextProtocol.Extensions.Security.CertificateValidator>();
             services.AddSingleton<ICertificateRevocationChecker, CertificateRevocationChecker>();
-            services.AddSingleton<ICertificatePinningService, CertificatePinningService>();
-            services.AddSingleton(typeof(TlsConnectionManager));
+            services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificatePinningService, ModelContextProtocol.Extensions.Security.CertificatePinningService>();
+            services.AddSingleton(typeof(ModelContextProtocol.Extensions.Security.TlsConnectionManager));
 
             return services;
         }
@@ -229,7 +229,7 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
         public static IServiceCollection AddMcpTlsMiddleware(this IServiceCollection services)
         {
             // Add HTTP client factory for CRL downloads
-            services.TryAddSingleton<IHttpClientFactory, DefaultHttpClientFactory>();
+            services.AddHttpClient();
 
             // Configure HTTP client
             services.Configure<HttpClientFactoryOptions>("CrlDownloader", options =>
@@ -242,12 +242,12 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
             });
 
             // Register TLS connection manager
-            services.AddSingleton(typeof(TlsConnectionManager));
+            services.AddSingleton(typeof(ModelContextProtocol.Extensions.Security.TlsConnectionManager));
 
             // Register certificate validation services
-            services.AddSingleton<ICertificateValidator, CertificateValidator>();
+            services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificateValidator, ModelContextProtocol.Extensions.Security.CertificateValidator>();
             services.AddSingleton<ICertificateRevocationChecker, CertificateRevocationChecker>();
-            services.AddSingleton<ICertificatePinningService, CertificatePinningService>();
+            services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificatePinningService, ModelContextProtocol.Extensions.Security.CertificatePinningService>();
 
             return services;
         }

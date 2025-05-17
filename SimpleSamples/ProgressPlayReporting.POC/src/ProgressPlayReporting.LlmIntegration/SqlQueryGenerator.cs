@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -15,28 +16,46 @@ namespace ProgressPlayReporting.LlmIntegration
     public class SqlQueryGenerator : ISqlQueryGenerator
     {
         private readonly ILlmGateway _llmGateway;
+        private readonly PromptManagementService _promptManager;
         private readonly ILogger<SqlQueryGenerator> _logger;
 
         /// <summary>
         /// Creates a new instance of SqlQueryGenerator
         /// </summary>
         /// <param name="llmGateway">The LLM gateway to use</param>
+        /// <param name="promptManager">The prompt management service</param>
         /// <param name="logger">The logger to use</param>
-        public SqlQueryGenerator(ILlmGateway llmGateway, ILogger<SqlQueryGenerator> logger)
+        public SqlQueryGenerator(
+            ILlmGateway llmGateway, 
+            PromptManagementService promptManager,
+            ILogger<SqlQueryGenerator> logger)
         {
             _llmGateway = llmGateway ?? throw new ArgumentNullException(nameof(llmGateway));
+            _promptManager = promptManager ?? throw new ArgumentNullException(nameof(promptManager));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        }
-
-        /// <inheritdoc />
+        }        /// <inheritdoc />
         public async Task<SqlQueryResult> GenerateSqlQueryAsync(string request, DatabaseSchema schema)
         {
             try
             {
                 _logger.LogInformation("Generating SQL query for request: {Request}", request);
 
-                var prompt = BuildGenerationPrompt(request, schema);
+                // Use the prompt management service with the sql_query_generation template
+                var parameters = new Dictionary<string, string>
+                {
+                    ["request"] = request,
+                    ["schema"] = FormatSchemaForPrompt(schema)
+                };
+                
+                var prompt = _promptManager.PreparePrompt("sql_query_generation", parameters);
+                
+                // Track execution time for analytics
+                var stopwatch = Stopwatch.StartNew();
                 var response = await _llmGateway.GenerateCompletionAsync(prompt);
+                stopwatch.Stop();
+                
+                // Track the response
+                _promptManager.TrackResponse("sql_query_generation", response, stopwatch.ElapsedMilliseconds);
 
                 return ParseQueryResponse(response);
             }
@@ -45,9 +64,7 @@ namespace ProgressPlayReporting.LlmIntegration
                 _logger.LogError(ex, "Error generating SQL query");
                 throw;
             }
-        }
-
-        /// <inheritdoc />
+        }        /// <inheritdoc />
         public async Task<SqlQueryValidationResult> ValidateSqlQueryAsync(string query, DatabaseSchema schema)
         {
             try
@@ -55,8 +72,22 @@ namespace ProgressPlayReporting.LlmIntegration
                 _logger.LogInformation("Validating SQL query: {QueryStart}...", 
                     query.Length > 50 ? query.Substring(0, 50) + "..." : query);
 
-                var prompt = BuildValidationPrompt(query, schema);
+                // Use the prompt management service with the sql_query_validation template
+                var parameters = new Dictionary<string, string>
+                {
+                    ["query"] = query,
+                    ["schema"] = FormatSchemaForPrompt(schema)
+                };
+                
+                var prompt = _promptManager.PreparePrompt("sql_query_validation", parameters);
+                
+                // Track execution time for analytics
+                var stopwatch = Stopwatch.StartNew();
                 var response = await _llmGateway.GenerateCompletionAsync(prompt);
+                stopwatch.Stop();
+                
+                // Track the response
+                _promptManager.TrackResponse("sql_query_validation", response, stopwatch.ElapsedMilliseconds);
 
                 return ParseValidationResponse(response);
             }
@@ -65,9 +96,7 @@ namespace ProgressPlayReporting.LlmIntegration
                 _logger.LogError(ex, "Error validating SQL query");
                 throw;
             }
-        }
-
-        /// <inheritdoc />
+        }        /// <inheritdoc />
         public async Task<string> ExplainSqlQueryAsync(string query, DatabaseSchema schema = null)
         {
             try
@@ -75,8 +104,22 @@ namespace ProgressPlayReporting.LlmIntegration
                 _logger.LogInformation("Explaining SQL query: {QueryStart}...", 
                     query.Length > 50 ? query.Substring(0, 50) + "..." : query);
 
-                var prompt = BuildExplanationPrompt(query, schema);
+                // Use the prompt management service with the sql_query_explanation template
+                var parameters = new Dictionary<string, string>
+                {
+                    ["query"] = query,
+                    ["schema"] = schema != null ? FormatSchemaForPrompt(schema) : "Not provided"
+                };
+                
+                var prompt = _promptManager.PreparePrompt("sql_query_explanation", parameters);
+                
+                // Track execution time for analytics
+                var stopwatch = Stopwatch.StartNew();
                 var explanation = await _llmGateway.GenerateCompletionAsync(prompt);
+                stopwatch.Stop();
+                
+                // Track the response
+                _promptManager.TrackResponse("sql_query_explanation", explanation, stopwatch.ElapsedMilliseconds);
 
                 return explanation;
             }

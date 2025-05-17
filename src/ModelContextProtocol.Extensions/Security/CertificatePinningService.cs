@@ -19,10 +19,10 @@ namespace ModelContextProtocol.Extensions.Security
         private readonly ILogger<CertificatePinningService> _logger;
         private readonly TlsOptions _tlsOptions;
         private readonly SemaphoreSlim _pinLock = new(1, 1);
-        
+
         // Cache of pinned certificate thumbprints
         private readonly ConcurrentDictionary<string, PinnedCertificateInfo> _pinnedCertificates = new();
-        
+
         /// <summary>
         /// Creates a new instance of the certificate pinning service
         /// </summary>
@@ -32,7 +32,7 @@ namespace ModelContextProtocol.Extensions.Security
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _tlsOptions = tlsOptions?.Value ?? throw new ArgumentNullException(nameof(tlsOptions));
-            
+
             // Initialize by loading any configured pins
             LoadPinnedCertificates();
         }
@@ -51,56 +51,53 @@ namespace ModelContextProtocol.Extensions.Security
             try
             {
                 // If certificate pinning is disabled, always return true
-                if (!_tlsOptions.UseCertificatePinning)
+                if (!_tlsOptions.CertificatePinning.Enabled)
                 {
                     return true;
                 }
-                
+
                 var thumbprint = certificate.Thumbprint;
-                
+
                 // First try direct thumbprint match (most secure)
                 if (_pinnedCertificates.TryGetValue(thumbprint, out var pinInfo))
                 {
                     _logger.LogDebug("Certificate {Thumbprint} matched pinned certificate", thumbprint);
                     return true;
                 }
-                
-                // If exact thumbprint matching is required and we didn't find a match, fail
-                if (_tlsOptions.RequireExactCertificateMatch)
-                {
-                    _logger.LogWarning("Certificate {Thumbprint} did not match any pinned certificates and exact matching is required", 
-                        thumbprint);
-                    return false;
-                }
-                
+
+                // If we didn't find a match, fail
+                _logger.LogWarning("Certificate {Thumbprint} did not match any pinned certificates",
+                    thumbprint);
+                return false;
+
                 // If we get here, try to match by public key or issuer chain
                 // This allows for certificate rotation while maintaining the same keys
-                
+
                 // Extract the public key
                 var publicKey = certificate.PublicKey.EncodedKeyValue.RawData;
-                
+
                 // Check if any pins match this public key
                 var matchByPublicKey = _pinnedCertificates.Values
                     .Where(p => p.PublicKeyHash != null)
                     .Any(p => CompareByteArrays(ComputeHash(publicKey), p.PublicKeyHash));
-                
+
                 if (matchByPublicKey)
                 {
                     _logger.LogDebug("Certificate {Thumbprint} matched by public key", thumbprint);
                     return true;
                 }
-                
+
                 // If no pinned certificates match and pinning is enforced, fail
-                _logger.LogWarning("Certificate {Thumbprint} did not match any pinned certificates or public keys", 
+                _logger.LogWarning("Certificate {Thumbprint} did not match any pinned certificates or public keys",
                     thumbprint);
                 return false;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error validating certificate pin for {Subject}", certificate.Subject);
-                
-                // In case of errors, fall back to the configured behavior
-                return _tlsOptions.AllowOnPinningFailure;
+
+                // In case of errors, fail closed
+                return false;
             }
         }
 
@@ -118,7 +115,7 @@ namespace ModelContextProtocol.Extensions.Security
             {
                 var thumbprint = certificate.Thumbprint;
                 var publicKeyHash = ComputeHash(certificate.PublicKey.EncodedKeyValue.RawData);
-                
+
                 var pinnedInfo = new PinnedCertificateInfo
                 {
                     Thumbprint = thumbprint,
@@ -128,19 +125,19 @@ namespace ModelContextProtocol.Extensions.Security
                     PinnedDate = DateTime.UtcNow,
                     IsPermanent = isPermanent
                 };
-                
+
                 var added = _pinnedCertificates.TryAdd(thumbprint, pinnedInfo);
-                
+
                 if (added)
                 {
                     _logger.LogInformation("Added certificate {Thumbprint} to pinned certificates list", thumbprint);
-                    
+
                     if (isPermanent)
                     {
                         SavePinnedCertificates();
                     }
                 }
-                
+
                 return added;
             }
             catch (Exception ex)
@@ -163,13 +160,13 @@ namespace ModelContextProtocol.Extensions.Security
             try
             {
                 var removed = _pinnedCertificates.TryRemove(thumbprint, out _);
-                
+
                 if (removed)
                 {
                     _logger.LogInformation("Removed certificate {Thumbprint} from pinned certificates list", thumbprint);
                     SavePinnedCertificates();
                 }
-                
+
                 return removed;
             }
             catch (Exception ex)
@@ -222,15 +219,15 @@ namespace ModelContextProtocol.Extensions.Security
             try
             {
                 _pinLock.Wait();
-                
+
                 // First add any certificates configured in the options
-                if (_tlsOptions.PinnedCertificates != null)
+                if (_tlsOptions.CertificatePinning.PinnedCertificates != null)
                 {
-                    foreach (var certPath in _tlsOptions.PinnedCertificates)
+                    foreach (var certPath in _tlsOptions.CertificatePinning.PinnedCertificates)
                     {
                         try
                         {
-                            var certificate = CertificateHelper.LoadCertificateFromFile(certPath);
+                            var certificate = CertificateHelper.LoadCertificateFromFile(certPath, string.Empty, _logger);
                             if (certificate != null)
                             {
                                 AddCertificatePin(certificate, true);
@@ -242,14 +239,14 @@ namespace ModelContextProtocol.Extensions.Security
                         }
                     }
                 }
-                
+
                 // Now load any saved pins from storage
-                var path = Path.Combine(_tlsOptions.CertificatePinStoragePath, "pinned_certs.json");
+                var path = Path.Combine(_tlsOptions.CertificatePinning.PinnedCertificatesPath, "pinned_certs.json");
                 if (File.Exists(path))
                 {
                     var json = File.ReadAllText(path);
                     var pinned = System.Text.Json.JsonSerializer.Deserialize<List<PinnedCertificateInfo>>(json);
-                    
+
                     if (pinned != null)
                     {
                         foreach (var pin in pinned)
@@ -259,7 +256,7 @@ namespace ModelContextProtocol.Extensions.Security
                                 _pinnedCertificates.TryAdd(pin.Thumbprint, pin);
                             }
                         }
-                        
+
                         _logger.LogInformation("Loaded {Count} pinned certificates from storage", _pinnedCertificates.Count);
                     }
                 }
@@ -282,22 +279,22 @@ namespace ModelContextProtocol.Extensions.Security
             try
             {
                 _pinLock.Wait();
-                
+
                 // Only save permanent pins
                 var permanentPins = _pinnedCertificates.Values
                     .Where(p => p.IsPermanent)
                     .ToList();
-                
-                var directory = _tlsOptions.CertificatePinStoragePath;
+
+                var directory = _tlsOptions.CertificatePinning.PinnedCertificatesPath;
                 if (!Directory.Exists(directory))
                 {
                     Directory.CreateDirectory(directory);
                 }
-                
+
                 var path = Path.Combine(directory, "pinned_certs.json");
                 var json = System.Text.Json.JsonSerializer.Serialize(permanentPins);
                 File.WriteAllText(path, json);
-                
+
                 _logger.LogDebug("Saved {Count} pinned certificates to storage", permanentPins.Count);
             }
             catch (Exception ex)
@@ -320,27 +317,27 @@ namespace ModelContextProtocol.Extensions.Security
         /// The certificate thumbprint
         /// </summary>
         public string Thumbprint { get; set; }
-        
+
         /// <summary>
         /// The subject name of the certificate
         /// </summary>
         public string SubjectName { get; set; }
-        
+
         /// <summary>
         /// The issuer name of the certificate
         /// </summary>
         public string IssuerName { get; set; }
-        
+
         /// <summary>
         /// The hash of the public key
         /// </summary>
         public byte[] PublicKeyHash { get; set; }
-        
+
         /// <summary>
         /// When the certificate was pinned
         /// </summary>
         public DateTime PinnedDate { get; set; }
-        
+
         /// <summary>
         /// Whether the pin is permanent
         /// </summary>

@@ -11,7 +11,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:80;https://+:443
-      - ConnectionStrings__DefaultConnection=data source=185.64.56.157;initial catalog=DailyActionsDB;persist security info=True;user id=ReportsUser;password=Pp@123456;
+      - ConnectionStrings__DefaultConnection=${DB_CONNECTION_STRING}
     volumes:
       - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro
       - ${APPDATA}/ASP.NET/Https:/root/.aspnet/https:ro

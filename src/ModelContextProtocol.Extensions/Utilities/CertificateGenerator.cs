@@ -21,10 +21,10 @@ namespace ModelContextProtocol.Extensions.Utilities
             {
                 outputDirectory = ".";
             }
-            
+
             // Make sure the directory exists
             Directory.CreateDirectory(outputDirectory);
-            
+
             // Generate server certificate
             var serverCertPath = Path.Combine(outputDirectory, "server.pfx");
             var serverCert = CertificateHelper.CreateSelfSignedCertificate(
@@ -33,7 +33,7 @@ namespace ModelContextProtocol.Extensions.Utilities
                 "password",
                 serverCertPath,
                 logger);
-            
+
             // Generate client certificate
             var clientCertPath = Path.Combine(outputDirectory, "client.pfx");
             var clientCert = CertificateHelper.CreateSelfSignedCertificate(
@@ -42,13 +42,13 @@ namespace ModelContextProtocol.Extensions.Utilities
                 "password",
                 clientCertPath,
                 logger);
-            
+
             // Print certificate information
             logger?.LogInformation("Generated server certificate: {Thumbprint}", serverCert.Thumbprint);
             logger?.LogInformation("Generated client certificate: {Thumbprint}", clientCert.Thumbprint);
             logger?.LogInformation("Certificates saved to directory: {Directory}", outputDirectory);
             logger?.LogInformation("Certificate password: 'password'");
-            
+
             // Print configuration instructions
             logger?.LogInformation("To use these certificates:");
             logger?.LogInformation("1. Update appsettings.json for the server:");
@@ -59,29 +59,29 @@ namespace ModelContextProtocol.Extensions.Utilities
             logger?.LogInformation("     \"RequireClientCertificate\": true,");
             logger?.LogInformation("     \"AllowedClientCertificateThumbprints\": [\"{0}\"]", clientCert.Thumbprint);
             logger?.LogInformation("   }}");
-            
+
             logger?.LogInformation("2. Update appsettings.json for the client:");
             logger?.LogInformation("   \"UseTls\": true,");
             logger?.LogInformation("   \"ClientCertificatePath\": \"{0}\",", clientCertPath);
             logger?.LogInformation("   \"ClientCertificatePassword\": \"password\"");
         }
-        
+
         /// <summary>
         /// Main entry point for the certificate generator tool
         /// </summary>
         public static void Main(string[] args)
         {
             string outputDirectory = args.Length > 0 ? args[0] : ".";
-            
+
             // Set up console logger
             using var loggerFactory = LoggerFactory.Create(builder =>
             {
                 builder.AddConsole();
                 builder.SetMinimumLevel(LogLevel.Debug);
             });
-            
+
             var logger = loggerFactory.CreateLogger("CertificateGenerator");
-            
+
             try
             {
                 logger.LogInformation("Generating development certificates for MCP");

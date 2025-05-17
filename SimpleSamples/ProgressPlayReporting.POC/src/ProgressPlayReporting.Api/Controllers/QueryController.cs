@@ -2,10 +2,14 @@ using System;
 using System.Data;
 using System.Data.SqlClient;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using ProgressPlayReporting.Core.Interfaces;
+using ProgressPlayReporting.Api.Models;
+using ProgressPlayReporting.Api.Security;
+using ProgressPlayReporting.Validators.Interfaces;
 
 namespace ProgressPlayReporting.Api.Controllers
 {
@@ -15,17 +19,20 @@ namespace ProgressPlayReporting.Api.Controllers
     {
         private readonly ISqlQueryGenerator _queryGenerator;
         private readonly ISchemaExtractor _schemaExtractor;
+        private readonly IQueryValidator _queryValidator;
         private readonly ILogger<QueryController> _logger;
         private readonly IConfiguration _configuration;
 
         public QueryController(
             ISqlQueryGenerator queryGenerator,
             ISchemaExtractor schemaExtractor,
+            IQueryValidator queryValidator,
             ILogger<QueryController> logger,
             IConfiguration configuration)
         {
             _queryGenerator = queryGenerator;
             _schemaExtractor = schemaExtractor;
+            _queryValidator = queryValidator ?? throw new ArgumentNullException(nameof(queryValidator));
             _logger = logger;
             _configuration = configuration;
         }
@@ -125,29 +132,112 @@ namespace ProgressPlayReporting.Api.Controllers
                 _logger.LogError(ex, "Error explaining SQL query");
                 return StatusCode(500, "An error occurred while explaining the SQL query");
             }
-        }
-
-        [HttpPost("execute")]
-        public async Task<IActionResult> ExecuteQuery([FromBody] QueryExecutionRequest request)
+        }        [HttpPost("execute")]
+        public async Task<IActionResult> ExecuteQuery([FromBody] QueryExecutionRequest request, 
+            [FromQuery] int page = 1, [FromQuery] int pageSize = 100)
         {
             try
             {
                 if (string.IsNullOrEmpty(request.SqlQuery))
                 {
-                    return BadRequest("SQL query is required");
+                    return BadRequest(new ApiErrorResponse 
+                    { 
+                        ErrorCode = "MISSING_PARAMETER", 
+                        Message = "SQL query is required",
+                        RequestId = HttpContext.TraceIdentifier
+                    });
                 }
+
+                if (page < 1) page = 1;
+                if (pageSize < 1) pageSize = 100;
+                if (pageSize > 1000) pageSize = 1000; // Limit maximum page size
 
                 var connectionString = _configuration.GetConnectionString("DefaultConnection");
                 if (string.IsNullOrEmpty(connectionString))
                 {
-                    return BadRequest("Database connection string not configured");
+                    return BadRequest(new ApiErrorResponse 
+                    { 
+                        ErrorCode = "CONFIGURATION_ERROR", 
+                        Message = "Database connection string not configured",
+                        RequestId = HttpContext.TraceIdentifier
+                    });
+                }
+                
+                // Validate the query for potential SQL injection
+                var validationResult = await _queryValidator.ValidateQueryAsync(request.SqlQuery);
+                if (!validationResult.IsValid && validationResult.Severity >= ValidationSeverity.Error)
+                {
+                    return BadRequest(new ApiErrorResponse 
+                    { 
+                        ErrorCode = "SQL_VALIDATION_ERROR", 
+                        Message = "Query contains potential security threats or syntax errors",
+                        Details = validationResult.Issues.ConvertAll(i => i.Message),
+                        RequestId = HttpContext.TraceIdentifier
+                    });
                 }
 
-                // Execute the query and return the results
+                // If the request is for a paged result, modify the query to include pagination
+                string pagedQuery = request.SqlQuery;
+                if (!pagedQuery.ToLowerInvariant().Contains("order by"))
+                {
+                    _logger.LogWarning("Query does not contain ORDER BY clause which is recommended for pagination");
+                }
+
+                // Wrap the original query in a pagination query using SQL Server's OFFSET-FETCH syntax
+                if (page > 1 || pageSize < 1000)
+                {
+                    // Simple check if the query already has an OFFSET clause
+                    if (!pagedQuery.ToLowerInvariant().Contains("offset"))
+                    {
+                        // For SQL Server 2012 and later, add OFFSET/FETCH
+                        pagedQuery = $@"
+                            WITH OriginalQuery AS (
+                                {request.SqlQuery}
+                            )
+                            SELECT * FROM OriginalQuery
+                            ORDER BY (SELECT NULL)
+                            OFFSET {(page - 1) * pageSize} ROWS
+                            FETCH NEXT {pageSize} ROWS ONLY";
+                    }
+                }
+
+                // Calculate total count (optional, can impact performance)
+                int totalCount = 0;
+                bool includeTotalCount = request.IncludeTotalCount;
+                
+                if (includeTotalCount)
+                {
+                    // Get total count with a separate query for accurate pagination
+                    string countQuery = $@"
+                        WITH OriginalQuery AS (
+                            {request.SqlQuery}
+                        )
+                        SELECT COUNT(*) FROM OriginalQuery";
+                    
+                    try
+                    {
+                        using (var connection = new SqlConnection(connectionString))
+                        {
+                            await connection.OpenAsync();
+                            using (var command = new SqlCommand(countQuery, connection))
+                            {
+                                command.CommandTimeout = 30;
+                                totalCount = Convert.ToInt32(await command.ExecuteScalarAsync());
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error calculating total count, proceeding without total count");
+                        includeTotalCount = false;
+                    }
+                }
+
+                // Execute the paged query and return the results
                 using (var connection = new SqlConnection(connectionString))
                 {
                     await connection.OpenAsync();
-                    using (var command = new SqlCommand(request.SqlQuery, connection))
+                    using (var command = new SqlCommand(pagedQuery, connection))
                     {
                         // Set a timeout to prevent long-running queries
                         command.CommandTimeout = 30; // 30 seconds
@@ -156,15 +246,46 @@ namespace ProgressPlayReporting.Api.Controllers
                         {
                             var dataTable = new DataTable();
                             dataTable.Load(reader);
-                            return Ok(dataTable);
+                            
+                            // Return result with pagination information
+                            var result = new
+                            {
+                                Data = dataTable,
+                                Pagination = new 
+                                {
+                                    Page = page,
+                                    PageSize = pageSize,
+                                    TotalCount = includeTotalCount ? totalCount : (int?)null,
+                                    TotalPages = includeTotalCount ? (int)Math.Ceiling((double)totalCount / pageSize) : (int?)null
+                                }
+                            };
+                            
+                            return Ok(result);
                         }
                     }
                 }
             }
+            catch (SqlException ex)
+            {
+                _logger.LogError(ex, "SQL error executing query");
+                return StatusCode(400, new ApiErrorResponse 
+                { 
+                    ErrorCode = "SQL_ERROR", 
+                    Message = "Error in SQL query",
+                    Details = new List<string> { ex.Message },
+                    RequestId = HttpContext.TraceIdentifier
+                });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error executing SQL query");
-                return StatusCode(500, "An error occurred while executing the SQL query: " + ex.Message);
+                return StatusCode(500, new ApiErrorResponse 
+                { 
+                    ErrorCode = "EXECUTION_ERROR", 
+                    Message = "An error occurred while executing the SQL query",
+                    Details = new List<string> { ex.Message },
+                    RequestId = HttpContext.TraceIdentifier
+                });
             }
         }
     }
@@ -188,5 +309,6 @@ namespace ProgressPlayReporting.Api.Controllers
     public class QueryExecutionRequest
     {
         public string SqlQuery { get; set; }
+        public bool IncludeTotalCount { get; set; } = false;
     }
 }

@@ -22,25 +22,25 @@ namespace ModelContextProtocol.Extensions.Security
         private readonly TlsOptions _tlsOptions;
         private readonly HttpClient _httpClient;
         private readonly SemaphoreSlim _cacheLock = new(1, 1);
-        
+
         // Cache of revoked certificate thumbprints
         private readonly ConcurrentDictionary<string, DateTime> _revokedCertificates = new();
-        
+
         // Last time the CRL was updated
         private DateTime _lastCrlUpdate = DateTime.MinValue;
-        
+
         /// <summary>
         /// Creates a new instance of the certificate revocation checker
         /// </summary>
         public CertificateRevocationChecker(
             ILogger<CertificateRevocationChecker> logger,
             IOptions<TlsOptions> tlsOptions,
-            IHttpClientFactory httpClientFactory)
+            System.Net.Http.IHttpClientFactory httpClientFactory)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _tlsOptions = tlsOptions?.Value ?? throw new ArgumentNullException(nameof(tlsOptions));
             _httpClient = httpClientFactory?.CreateClient("CrlDownloader") ?? throw new ArgumentNullException(nameof(httpClientFactory));
-            
+
             // Initialize by loading any cached revocation list
             LoadRevocationList();
         }
@@ -59,7 +59,7 @@ namespace ModelContextProtocol.Extensions.Security
             try
             {
                 var thumbprint = certificate.Thumbprint;
-                
+
                 // Check our local cache first
                 if (_revokedCertificates.ContainsKey(thumbprint))
                 {
@@ -68,13 +68,13 @@ namespace ModelContextProtocol.Extensions.Security
                 }
 
                 // If we're configured to only use the local cache, return true at this point
-                if (_tlsOptions.RevocationCheckMode == RevocationCheckMode.LocalCacheOnly)
+                if (_tlsOptions.RevocationOptions.CheckRevocation == false)
                 {
                     return true;
                 }
 
                 // If the CRL needs updating and we're allowed to check online
-                if ((DateTime.UtcNow - _lastCrlUpdate).TotalHours > _tlsOptions.CrlUpdateIntervalHours)
+                if ((DateTime.UtcNow - _lastCrlUpdate).TotalHours > 24)
                 {
                     // Attempt to update, but don't block on it for too long
                     var updateTask = Task.Run(() => UpdateRevocationLists());
@@ -85,14 +85,13 @@ namespace ModelContextProtocol.Extensions.Security
                 }
 
                 // Check OCSP if configured
-                if (_tlsOptions.RevocationCheckMode == RevocationCheckMode.OcspAndCrl || 
-                    _tlsOptions.RevocationCheckMode == RevocationCheckMode.OcspOnly)
+                if (_tlsOptions.RevocationOptions.UseOcsp)
                 {
                     // For OCSP checking, we use .NET's built-in mechanisms via X509Chain
                     var chain = new X509Chain();
                     chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
                     chain.ChainPolicy.RevocationFlag = X509RevocationFlag.EntireChain;
-                    
+
                     if (!chain.Build(certificate))
                     {
                         foreach (var status in chain.ChainStatus)
@@ -100,7 +99,7 @@ namespace ModelContextProtocol.Extensions.Security
                             if (status.Status == X509ChainStatusFlags.RevocationStatusUnknown ||
                                 status.Status == X509ChainStatusFlags.Revoked)
                             {
-                                _logger.LogWarning("Certificate {Thumbprint} failed OCSP check: {Status}", 
+                                _logger.LogWarning("Certificate {Thumbprint} failed OCSP check: {Status}",
                                     thumbprint, status.StatusInformation);
                                 return false;
                             }
@@ -109,14 +108,13 @@ namespace ModelContextProtocol.Extensions.Security
                 }
 
                 // Check CRL from certificate if configured
-                if (_tlsOptions.RevocationCheckMode == RevocationCheckMode.OcspAndCrl || 
-                    _tlsOptions.RevocationCheckMode == RevocationCheckMode.CrlOnly)
+                if (_tlsOptions.RevocationOptions.UseCrl)
                 {
                     // Get CRL distribution points from the certificate
                     var crlDistributionPoints = certificate.Extensions
                         .OfType<X509Extension>()
                         .FirstOrDefault(e => e.Oid.Value == "2.5.29.31"); // CRL Distribution Points OID
-                    
+
                     if (crlDistributionPoints != null)
                     {
                         // Parse the CRL distribution points and check them
@@ -130,9 +128,9 @@ namespace ModelContextProtocol.Extensions.Security
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error checking certificate revocation for {Subject}", certificate.Subject);
-                
-                // If we can't check, fall back to the configured behavior
-                return _tlsOptions.RevocationFailureMode == RevocationFailureMode.Allow;
+
+                // If we can't check, fail closed
+                return !_tlsOptions.RevocationOptions.FailClosed;
             }
         }
 
@@ -144,18 +142,18 @@ namespace ModelContextProtocol.Extensions.Security
             try
             {
                 _logger.LogInformation("Updating certificate revocation lists");
-                
+
                 // In a real implementation, this would download CRLs from configured sources
                 // and update the local cache
-                
+
                 // For trusted CAs, you would typically:
                 // 1. Download CRLs from distribution points
                 // 2. Parse the CRLs
                 // 3. Update the local cache
-                
+
                 _lastCrlUpdate = DateTime.UtcNow;
                 SaveRevocationList(); // Save our updated cache
-                
+
                 return true;
             }
             catch (Exception ex)
@@ -179,13 +177,13 @@ namespace ModelContextProtocol.Extensions.Security
             {
                 var thumbprint = certificate.Thumbprint;
                 var added = _revokedCertificates.TryAdd(thumbprint, DateTime.UtcNow);
-                
+
                 if (added)
                 {
                     _logger.LogInformation("Added certificate {Thumbprint} to local revocation list", thumbprint);
                     SaveRevocationList();
                 }
-                
+
                 return added;
             }
             catch (Exception ex)
@@ -203,20 +201,20 @@ namespace ModelContextProtocol.Extensions.Security
             try
             {
                 _cacheLock.Wait();
-                
-                var path = Path.Combine(_tlsOptions.RevocationCachePath, "revoked_certs.json");
+
+                var path = Path.Combine(_tlsOptions.RevocationOptions.RevocationCachePath, "revoked_certs.json");
                 if (File.Exists(path))
                 {
                     var json = File.ReadAllText(path);
                     var revoked = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, DateTime>>(json);
-                    
+
                     if (revoked != null)
                     {
                         foreach (var (thumbprint, date) in revoked)
                         {
                             _revokedCertificates.TryAdd(thumbprint, date);
                         }
-                        
+
                         _logger.LogInformation("Loaded {Count} revoked certificates from cache", _revokedCertificates.Count);
                     }
                 }
@@ -239,17 +237,17 @@ namespace ModelContextProtocol.Extensions.Security
             try
             {
                 _cacheLock.Wait();
-                
-                var directory = _tlsOptions.RevocationCachePath;
+
+                var directory = _tlsOptions.RevocationOptions.RevocationCachePath;
                 if (!Directory.Exists(directory))
                 {
                     Directory.CreateDirectory(directory);
                 }
-                
+
                 var path = Path.Combine(directory, "revoked_certs.json");
                 var json = System.Text.Json.JsonSerializer.Serialize(_revokedCertificates);
                 File.WriteAllText(path, json);
-                
+
                 _logger.LogDebug("Saved {Count} revoked certificates to cache", _revokedCertificates.Count);
             }
             catch (Exception ex)
@@ -272,17 +270,17 @@ namespace ModelContextProtocol.Extensions.Security
         /// Check only the local cache of revoked certificates
         /// </summary>
         LocalCacheOnly,
-        
+
         /// <summary>
         /// Check using Online Certificate Status Protocol
         /// </summary>
         OcspOnly,
-        
+
         /// <summary>
         /// Check using Certificate Revocation Lists
         /// </summary>
         CrlOnly,
-        
+
         /// <summary>
         /// Check using both OCSP and CRLs
         /// </summary>
@@ -298,7 +296,7 @@ namespace ModelContextProtocol.Extensions.Security
         /// Allow the certificate if revocation checks fail
         /// </summary>
         Allow,
-        
+
         /// <summary>
         /// Deny the certificate if revocation checks fail
         /// </summary>

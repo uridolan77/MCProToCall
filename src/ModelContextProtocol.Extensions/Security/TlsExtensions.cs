@@ -2,6 +2,7 @@ using System;
 using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
+using System.Security;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 
@@ -22,8 +23,8 @@ namespace ModelContextProtocol.Extensions.Security
         /// <param name="remoteEndpoint">Optional remote endpoint information for rate limiting</param>
         /// <param name="connectionLimit">Optional connection limit per client</param>
         public static void ConfigureTls(
-            this SslStream sslStream, 
-            X509Certificate2 certificate, 
+            this SslStream sslStream,
+            X509Certificate2 certificate,
             bool clientCertificateRequired = false,
             ILogger logger = null,
             string remoteEndpoint = null,
@@ -41,7 +42,7 @@ namespace ModelContextProtocol.Extensions.Security
 
             // Configure secure protocols - using TLS 1.2 and 1.3 only
             var sslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
-            
+
             try
             {
                 // Apply connection rate limiting if configured
@@ -53,19 +54,19 @@ namespace ModelContextProtocol.Extensions.Security
                         throw new SecurityException($"Connection limit exceeded for {remoteEndpoint}");
                     }
                 }
-                
+
                 sslStream.AuthenticateAsServer(
                     certificate,
                     clientCertificateRequired: clientCertificateRequired,
                     enabledSslProtocols: sslProtocols,
                     checkCertificateRevocation: true);
-                
+
                 // If we reached here, the connection is successful, so register it
                 if (!string.IsNullOrEmpty(remoteEndpoint) && connectionLimit > 0)
                 {
                     TlsConnectionManager.RegisterConnection(remoteEndpoint);
                 }
-                
+
                 logger?.LogInformation("TLS connection established with protocol: {Protocol}", sslStream.SslProtocol);
             }
             catch (Exception ex)
@@ -83,8 +84,8 @@ namespace ModelContextProtocol.Extensions.Security
         /// <param name="clientCertificateRequired">Whether client certificates are required</param>
         /// <param name="logger">Optional logger for security events</param>
         public static async Task ConfigureTlsAsync(
-            this SslStream sslStream, 
-            X509Certificate2 certificate, 
+            this SslStream sslStream,
+            X509Certificate2 certificate,
             bool clientCertificateRequired = false,
             ILogger logger = null)
         {
@@ -100,7 +101,7 @@ namespace ModelContextProtocol.Extensions.Security
 
             // Configure secure protocols - using TLS 1.2 and 1.3 only
             var sslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
-            
+
             try
             {
                 await sslStream.AuthenticateAsServerAsync(
@@ -108,7 +109,7 @@ namespace ModelContextProtocol.Extensions.Security
                     clientCertificateRequired: clientCertificateRequired,
                     enabledSslProtocols: sslProtocols,
                     checkCertificateRevocation: true);
-                
+
                 logger?.LogInformation("TLS connection established with protocol: {Protocol}", sslStream.SslProtocol);
             }
             catch (Exception ex)
@@ -143,7 +144,7 @@ namespace ModelContextProtocol.Extensions.Security
 
             // Configure secure protocols - using TLS 1.2 and 1.3 only
             var sslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
-            
+
             try
             {
                 sslStream.AuthenticateAsClient(
@@ -151,7 +152,7 @@ namespace ModelContextProtocol.Extensions.Security
                     clientCertificates: clientCertificate != null ? new X509CertificateCollection { clientCertificate } : null,
                     enabledSslProtocols: sslProtocols,
                     checkCertificateRevocation: true);
-                
+
                 logger?.LogInformation("TLS client connection established with protocol: {Protocol}", sslStream.SslProtocol);
             }
             catch (Exception ex)
@@ -186,7 +187,7 @@ namespace ModelContextProtocol.Extensions.Security
 
             // Configure secure protocols - using TLS 1.2 and 1.3 only
             var sslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
-            
+
             try
             {
                 await sslStream.AuthenticateAsClientAsync(
@@ -194,7 +195,7 @@ namespace ModelContextProtocol.Extensions.Security
                     clientCertificates: clientCertificate != null ? new X509CertificateCollection { clientCertificate } : null,
                     enabledSslProtocols: sslProtocols,
                     checkCertificateRevocation: true);
-                
+
                 logger?.LogInformation("TLS client connection established with protocol: {Protocol}", sslStream.SslProtocol);
             }
             catch (Exception ex)
@@ -229,8 +230,8 @@ namespace ModelContextProtocol.Extensions.Security
             // Log detailed information about the certificate and validation failures
             var x509Certificate = certificate as X509Certificate2 ?? new X509Certificate2(certificate);
             logger?.LogWarning("Certificate validation failed with errors: {Errors}", sslPolicyErrors);
-            logger?.LogWarning("Certificate subject: {Subject}, issuer: {Issuer}", 
-                x509Certificate.Subject, 
+            logger?.LogWarning("Certificate subject: {Subject}, issuer: {Issuer}",
+                x509Certificate.Subject,
                 x509Certificate.Issuer);
 
             // You can implement custom validation logic here if needed
@@ -267,15 +268,15 @@ namespace ModelContextProtocol.Extensions.Security
             var x509Certificate = certificate as X509Certificate2 ?? new X509Certificate2(certificate);
             var thumbprint = x509Certificate.Thumbprint;
 
-            logger?.LogDebug("Validating client certificate: {Subject}, thumbprint: {Thumbprint}", 
-                x509Certificate.Subject, 
+            logger?.LogDebug("Validating client certificate: {Subject}, thumbprint: {Thumbprint}",
+                x509Certificate.Subject,
                 thumbprint);
 
             // Check basic certificate validity
             if (sslPolicyErrors != SslPolicyErrors.None)
             {
                 logger?.LogWarning("Client certificate validation failed with errors: {Errors}", sslPolicyErrors);
-                
+
                 // You can implement custom validation logic here if needed
                 // For example, ignoring certain errors in specific scenarios
             }
@@ -283,9 +284,9 @@ namespace ModelContextProtocol.Extensions.Security
             // If we have a list of allowed thumbprints, verify the client certificate is in that list
             if (allowedClientThumbprints != null && allowedClientThumbprints.Length > 0)
             {
-                bool isAllowed = Array.Exists(allowedClientThumbprints, t => 
+                bool isAllowed = Array.Exists(allowedClientThumbprints, t =>
                     string.Equals(t, thumbprint, StringComparison.OrdinalIgnoreCase));
-                
+
                 if (!isAllowed)
                 {
                     logger?.LogWarning("Client certificate rejected: Thumbprint not in allowed list");

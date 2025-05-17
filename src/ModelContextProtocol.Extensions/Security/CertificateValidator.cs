@@ -43,8 +43,8 @@ namespace ModelContextProtocol.Extensions.Security
                 return false;
             }
 
-            // If we're allowing all certificates in development mode and that flag is set
-            if (_tlsOptions.AllowUntrustedCertificates && Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
+            // If we're in development mode
+            if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
             {
                 _logger.LogWarning("Allowing untrusted certificate in development mode: {Subject}", certificate.Subject);
                 return true;
@@ -58,14 +58,14 @@ namespace ModelContextProtocol.Extensions.Security
             }
 
             // Check certificate revocation if enabled
-            if (_tlsOptions.CheckCertificateRevocation && !_revocationChecker.ValidateCertificateNotRevoked(certificate))
+            if (_tlsOptions.RevocationOptions.CheckRevocation && !_revocationChecker.ValidateCertificateNotRevoked(certificate))
             {
                 _logger.LogWarning("Certificate validation failed: Certificate is revoked");
                 return false;
             }
 
             // Check certificate pinning if enabled
-            if (_tlsOptions.UseCertificatePinning && !_pinningService.ValidateCertificatePin(certificate))
+            if (_tlsOptions.CertificatePinning.Enabled && !_pinningService.ValidateCertificatePin(certificate))
             {
                 _logger.LogWarning("Certificate validation failed: Certificate pin validation failed");
                 return false;
@@ -97,10 +97,10 @@ namespace ModelContextProtocol.Extensions.Security
             try
             {
                 _logger.LogDebug("Validating server certificate: {Subject}", certificate.Subject);
-                
+
                 // Convert the certificate to X509Certificate2 for more functionality
                 var cert2 = certificate as X509Certificate2 ?? new X509Certificate2(certificate);
-                
+
                 return ValidateCertificate(cert2, chain, errors);
             }
             catch (Exception ex)
@@ -118,27 +118,27 @@ namespace ModelContextProtocol.Extensions.Security
             try
             {
                 _logger.LogDebug("Validating client certificate: {Subject}", certificate.Subject);
-                
+
                 // If client certificates are not required, allow null certificates
                 if (certificate == null && !_tlsOptions.RequireClientCertificate)
                 {
                     _logger.LogDebug("Client certificate not provided and not required");
                     return true;
                 }
-                
+
                 // If client certificates are required but none provided, reject
                 if (certificate == null && _tlsOptions.RequireClientCertificate)
                 {
                     _logger.LogWarning("Client certificate required but not provided");
                     return false;
                 }
-                
+
                 // Convert the certificate to X509Certificate2 for more functionality
                 var cert2 = certificate as X509Certificate2 ?? new X509Certificate2(certificate);
-                
+
                 // Additional client certificate specific validations can be added here
                 // For example, check if the certificate is in an allowed list
-                
+
                 return ValidateCertificate(cert2, chain, errors);
             }
             catch (Exception ex)
