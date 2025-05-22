@@ -1,0 +1,160 @@
+{
+  "Environment": "Production",
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft": "Warning",
+      "ModelContextProtocol": "Debug",
+      "Microsoft.Hosting.Lifetime": "Information"
+    }
+  },
+  "OpenTelemetry": {
+    "Endpoint": "http://localhost:4317",
+    "ServiceName": "MCP-Enhanced-Server",
+    "ExportInterval": 5000,
+    "EnableTracing": true,
+    "EnableMetrics": true,
+    "EnableLogging": true
+  },
+  "McpServer": {
+    "Host": "0.0.0.0",
+    "Port": 8443,
+    "UseTls": true,
+    "CertificatePath": "./certs/server.pfx",
+    "CertificatePassword": "${CERT_PASSWORD}",
+    "RequireClientCertificate": true,
+    "AllowedClientCertificateThumbprints": [
+      "A1B2C3D4E5F6789012345678901234567890ABCD",
+      "B2C3D4E5F678901234567890123456789012BCDE"
+    ],
+    "CheckCertificateRevocation": true,
+    "RevocationCachePath": "./certs/revocation",
+    "CrlUpdateIntervalHours": 24,
+    "AllowUntrustedCertificates": false,
+    "UseCertificatePinning": true,
+    "PinnedCertificates": [
+      "./certs/pinned/trusted-ca.crt",
+      "./certs/pinned/partner-cert.crt"
+    ],
+    "CertificatePinStoragePath": "./certs/pins",
+    "MaxConnectionsPerIpAddress": 100,
+    "ConnectionRateLimitingWindowSeconds": 60,
+    "EnableAuthentication": true,
+    "JwtAuth": {
+      "SecretKey": "${JWT_SECRET_KEY}",
+      "Issuer": "MCP-Server",
+      "Audience": "MCP-Clients",
+      "AccessTokenExpirationMinutes": 15,
+      "RefreshTokenExpirationDays": 7
+    },
+    "Validation": {
+      "MaxRequestSize": 10485760,
+      "StrictSchemaValidation": true
+    },
+    "RateLimit": {
+      "Enabled": true,
+      "RequestsPerMinute": 60,
+      "RequestsPerDay": 10000
+    },
+    "Resources": [
+      {
+        "Id": "system-info",
+        "Name": "System Information",
+        "Type": "document",
+        "Metadata": {
+          "refreshInterval": "300",
+          "cached": "true"
+        }
+      }
+    ],
+    "Tools": [
+      {
+        "Id": "llm-generate",
+        "Name": "LLM Text Generation",
+        "Description": "Generate text using large language model",
+        "InputSchema": {
+          "type": "object",
+          "properties": {
+            "prompt": { "type": "string" },
+            "maxTokens": { "type": "integer", "default": 100 }
+          },
+          "required": ["prompt"]
+        }
+      }
+    ]
+  },
+  "Performance": {
+    "UseSourceGenerators": true,
+    "EnableObjectPooling": true,
+    "EnableResponseCaching": true,
+    "CacheDurationMinutes": 5,
+    "ConnectionPoolSize": 50,
+    "ConnectionLifetimeMinutes": 30,
+    "BufferPoolMaxSize": 10485760
+  },
+  "Resilience": {
+    "MaxRetryCount": 3,
+    "RetryBackoffFactor": 2.0,
+    "MaxRetryDelaySeconds": 30.0,
+    "CircuitBreakerThreshold": 5,
+    "CircuitBreakerDurationSeconds": 30,
+    "TimeoutSeconds": 30,
+    "LogResponseBodyOnError": false,
+    "EnableCircuitBreaker": true,
+    "EnableRetries": true,
+    "EnableTimeouts": true
+  },
+  "Streaming": {
+    "MaxConcurrentStreams": 100,
+    "StreamTimeout": 300,
+    "ChunkSize": 4096,
+    "EnableCompression": true
+  },
+  "WebSocket": {
+    "Enabled": true,
+    "KeepAliveInterval": 30,
+    "ReceiveBufferSize": 4096,
+    "MaxMessageSize": 1048576
+  },
+  "SignalR": {
+    "Enabled": true,
+    "EnableDetailedErrors": true,
+    "HandshakeTimeout": 15,
+    "KeepAliveInterval": 15,
+    "ClientTimeoutInterval": 30,
+    "EnableMessagePack": true
+  },
+  "Cors": {
+    "AllowedOrigins": [
+      "https://app.example.com",
+      "https://localhost:3000"
+    ]
+  },
+  "HealthChecks": {
+    "Enabled": true,
+    "Path": "/health",
+    "DetailedOutput": true,
+    "ResponseCacheDuration": 10
+  },
+  "Metrics": {
+    "PrometheusEndpoint": "/metrics",
+    "CollectionInterval": 60,
+    "HistogramBuckets": [0.1, 0.5, 1, 5, 10, 50, 100, 500, 1000],
+    "EnableRequestMetrics": true,
+    "EnableSystemMetrics": true
+  },
+  "Security": {
+    "EnableSecurityHeaders": true,
+    "EnableHsts": true,
+    "HstsMaxAge": 31536000,
+    "EnableXssProtection": true,
+    "EnableContentTypeNosniff": true,
+    "EnableFrameOptions": true,
+    "FrameOptionsPolicy": "DENY",
+    "ContentSecurityPolicy": "default-src 'self'; script-src 'self' 'unsafe-inline'",
+    "EnableAuditLogging": true,
+    "AuditLogPath": "./logs/audit",
+    "EnableRequestSigning": true,
+    "SignatureAlgorithm": "HMACSHA256"
+  }
+}

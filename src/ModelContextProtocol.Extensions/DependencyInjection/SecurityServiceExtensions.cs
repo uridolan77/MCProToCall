@@ -35,13 +35,20 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
             services.AddSingleton<ICertificateValidator, CertificateValidator>();
             services.AddSingleton<ICertificateRevocationChecker, CertificateRevocationChecker>();
             services.AddSingleton<ICertificatePinningService, CertificatePinningService>();
+            services.AddSingleton<ICertificateTransparencyVerifier, CertificateTransparencyVerifier>();
+
+            // Add HTTP client for certificate transparency verification
+            services.AddHttpClient("CtLogClient", client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(15);
+            });
 
             // Add credential management services
             services.Configure<KeyVaultOptions>(configuration.GetSection("KeyVault"));
             services.Configure<ConnectionStringOptions>(configuration.GetSection("ConnectionStrings"));
             services.AddSingleton<ISecretManager, KeyVaultSecretManager>();
             services.AddSingleton<IConnectionStringProvider, CachedConnectionStringProvider>();
-            
+
             // Add memory cache for connection string caching
             services.AddMemoryCache();
 
@@ -68,7 +75,7 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
 
             // Configure Key Vault options
             services.Configure<KeyVaultOptions>(configuration.GetSection("KeyVault"));
-            
+
             // Register the secret manager
             services.AddSingleton<ISecretManager, KeyVaultSecretManager>();
 
@@ -95,10 +102,10 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
 
             // Configure connection string options
             services.Configure<ConnectionStringOptions>(configuration.GetSection("ConnectionStrings"));
-            
+
             // Add memory cache for connection string caching
             services.AddMemoryCache();
-            
+
             // Register the connection string provider
             services.AddSingleton<IConnectionStringProvider, CachedConnectionStringProvider>();
 

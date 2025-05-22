@@ -14,6 +14,7 @@ using ModelContextProtocol.Core.Exceptions;
 using ModelContextProtocol.Core.Models.JsonRpc;
 using ModelContextProtocol.Core.Models.Mcp;
 using ModelContextProtocol.Core.Interfaces;
+using ModelContextProtocol.Core.Streaming;
 using ModelContextProtocol.Server.Security.Authentication;
 using ModelContextProtocol.Server.Security.TLS;
 using ModelContextProtocol.Server.Http;
@@ -27,6 +28,8 @@ namespace ModelContextProtocol.Server
         private readonly ILogger<McpServer> _logger;
         private readonly McpServerOptions _options;
         private readonly Dictionary<string, Func<JsonElement, Task<object>>> _methods;
+        private readonly Dictionary<string, Func<JsonElement, CancellationToken, IAsyncEnumerable<object>>> _streamingMethods;
+        private readonly StreamingResponseManager _streamingManager;
         private readonly HttpListener _httpListener;
         private readonly Dictionary<string, int> _clientRequestCounts = new Dictionary<string, int>();
         private readonly IJwtTokenProvider _tokenProvider;
@@ -46,7 +49,8 @@ namespace ModelContextProtocol.Server
             AuthorizationMiddleware authorizationMiddleware = null,
             ICertificateValidator certificateValidator = null,
             ICertificatePinningService certificatePinningService = null,
-            TlsConnectionManager tlsConnectionManager = null)
+            TlsConnectionManager tlsConnectionManager = null,
+            StreamingResponseManager streamingManager = null)
         {
             _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -55,8 +59,10 @@ namespace ModelContextProtocol.Server
             _certificateValidator = certificateValidator; // Optional, used for TLS validation
             _certificatePinningService = certificatePinningService; // Optional, used for certificate pinning
             _tlsConnectionManager = tlsConnectionManager; // Optional, used for TLS connection limiting
+            _streamingManager = streamingManager; // Optional, used for streaming support
 
             _methods = new Dictionary<string, Func<JsonElement, Task<object>>>();
+            _streamingMethods = new Dictionary<string, Func<JsonElement, CancellationToken, IAsyncEnumerable<object>>>();
             _httpListener = new HttpListener();
 
             // If TLS is enabled, configure the server certificate
@@ -349,6 +355,75 @@ namespace ModelContextProtocol.Server
         public void RegisterSecuredMethod(string methodName, Func<JsonElement, Task<object>> handler, IEnumerable<string> requiredRoles)
         {
             RegisterMethod(methodName, handler);
+
+            // If authorization middleware is available, register with specific roles
+            if (_authorizationMiddleware != null && _options.EnableAuthentication)
+            {
+                _authorizationMiddleware.RegisterMethodPermission(methodName, requiredRoles);
+            }
+        }
+
+        /// <inheritdoc/>
+        public void RegisterStreamingMethod(string methodName, Func<JsonElement, CancellationToken, IAsyncEnumerable<object>> handler)
+        {
+            if (string.IsNullOrEmpty(methodName))
+                throw new ArgumentException("Method name cannot be null or empty", nameof(methodName));
+
+            _streamingMethods[methodName] = handler ?? throw new ArgumentNullException(nameof(handler));
+            _logger.LogDebug("Registered streaming method: {MethodName}", methodName);
+
+            // Register a regular method that returns a stream ID
+            RegisterMethod(methodName, async parameters =>
+            {
+                if (_streamingManager == null)
+                {
+                    throw new McpException(-32603, "Streaming support is not available");
+                }
+
+                var requestId = Guid.NewGuid().ToString();
+                var dataStream = handler(parameters, CancellationToken.None);
+
+                // Start the stream and return the stream ID
+                var streamId = await _streamingManager.StartStreamAsync(
+                    requestId,
+                    dataStream,
+                    async notification =>
+                    {
+                        // This is a placeholder for sending notifications
+                        // In a real implementation, this would send the notification through the appropriate transport
+                        _logger.LogDebug("Stream notification: {StreamId}", notification.Params.StreamId);
+                    },
+                    CancellationToken.None);
+
+                return new { streamId, message = "Streaming started" };
+            });
+        }
+
+        /// <summary>
+        /// Registers a streaming method as publicly accessible (no authentication required)
+        /// </summary>
+        /// <param name="methodName">Method name</param>
+        /// <param name="handler">Streaming method handler</param>
+        public void RegisterPublicStreamingMethod(string methodName, Func<JsonElement, CancellationToken, IAsyncEnumerable<object>> handler)
+        {
+            RegisterStreamingMethod(methodName, handler);
+
+            // If authorization middleware is available, register as public
+            if (_authorizationMiddleware != null)
+            {
+                _authorizationMiddleware.RegisterPublicMethod(methodName);
+            }
+        }
+
+        /// <summary>
+        /// Registers a streaming method with specific role requirements
+        /// </summary>
+        /// <param name="methodName">Method name</param>
+        /// <param name="handler">Streaming method handler</param>
+        /// <param name="requiredRoles">Roles that can access this method</param>
+        public void RegisterSecuredStreamingMethod(string methodName, Func<JsonElement, CancellationToken, IAsyncEnumerable<object>> handler, IEnumerable<string> requiredRoles)
+        {
+            RegisterStreamingMethod(methodName, handler);
 
             // If authorization middleware is available, register with specific roles
             if (_authorizationMiddleware != null && _options.EnableAuthentication)
@@ -676,7 +751,7 @@ namespace ModelContextProtocol.Server
         /// <summary>
         /// Handle a JSON-RPC request directly
         /// </summary>
-        public async Task<JsonRpcResponse> HandleRequestAsync(JsonRpcRequest request)
+        public virtual async Task<JsonRpcResponse> HandleRequestAsync(JsonRpcRequest request)
         {
             if (request == null)
             {
@@ -749,7 +824,14 @@ namespace ModelContextProtocol.Server
                 Version = "1.0.0",
                 Resources = _options.Resources,
                 Tools = _options.Tools,
-                Prompts = _options.Prompts
+                Prompts = _options.Prompts,
+                Features = new
+                {
+                    Streaming = _streamingManager != null,
+                    WebSockets = false, // Will be set by WebSocketMcpServer
+                    Authentication = _options.EnableAuthentication,
+                    TLS = _options.UseTls
+                }
             }));
 
             // Echo method - requires User role
@@ -783,6 +865,53 @@ namespace ModelContextProtocol.Server
                     Timestamp = DateTime.UtcNow
                 });
             }, new[] { "Admin" });
+
+            // Ping method - public
+            RegisterPublicMethod("system.ping", _ => Task.FromResult<object>(new
+            {
+                pong = DateTime.UtcNow
+            }));
+
+            // Register streaming ping method if streaming is available
+            if (_streamingManager != null)
+            {
+                RegisterPublicStreamingMethod("system.streamingPing", (parameters, cancellationToken) =>
+                {
+                    // Get count parameter or default to 5
+                    int count = 5;
+                    if (parameters.TryGetProperty("count", out var countElement))
+                    {
+                        count = countElement.GetInt32();
+                    }
+
+                    // Create an async enumerable to stream ping responses
+                    return StreamPingResponsesAsync(count, cancellationToken);
+                });
+            }
+        }
+
+        /// <summary>
+        /// Streams ping responses
+        /// </summary>
+        /// <param name="count">Number of responses to stream</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        /// <returns>Async enumerable of ping responses</returns>
+        private async IAsyncEnumerable<object> StreamPingResponsesAsync(int count, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    yield break;
+
+                await Task.Delay(500, cancellationToken);
+
+                yield return new
+                {
+                    index = i,
+                    timestamp = DateTime.UtcNow,
+                    message = $"Ping {i + 1} of {count}"
+                };
+            }
         }
     }
 }

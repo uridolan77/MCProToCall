@@ -83,7 +83,7 @@ namespace ModelContextProtocol.Server.Security.TLS
                 }
 
                 // Check if certificate is pinned
-                bool isPinned = await _certificatePinningService.IsCertificatePinnedAsync(clientCertificate);
+                bool isPinned = await _certificatePinningService.ValidatePinAsync(clientCertificate);
 
                 // Store connection info
                 var connectionInfo = new TlsConnectionInfo

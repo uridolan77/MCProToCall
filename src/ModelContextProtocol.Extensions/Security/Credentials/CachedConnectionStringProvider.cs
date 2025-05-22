@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using ModelContextProtocol.Extensions.Utilities;
 
 namespace ModelContextProtocol.Extensions.Security.Credentials
 {
@@ -72,7 +73,7 @@ namespace ModelContextProtocol.Extensions.Security.Credentials
 
                 // Get the connection string from the secret manager
                 string connectionString = await _secretManager.GetSecretAsync(name);
-                
+
                 if (string.IsNullOrEmpty(connectionString))
                 {
                     throw new ConnectionStringNotFoundException($"Connection string '{name}' not found");
@@ -84,9 +85,9 @@ namespace ModelContextProtocol.Extensions.Security.Credentials
                     .SetSlidingExpiration(TimeSpan.FromMinutes(_options.SlidingExpirationMinutes));
 
                 _cache.Set(cacheKey, connectionString, cacheEntryOptions);
-                
+
                 _logger.LogInformation("Added connection string {Name} to cache", name);
-                
+
                 return connectionString;
             }
             catch (Exception ex) when (ex is not ConnectionStringNotFoundException)
@@ -107,33 +108,7 @@ namespace ModelContextProtocol.Extensions.Security.Credentials
         /// <returns>A sanitized version of the connection string</returns>
         public string GetSanitizedConnectionString(string connectionString)
         {
-            if (string.IsNullOrEmpty(connectionString))
-            {
-                return string.Empty;
-            }
-
-            // Sanitize password
-            string sanitized = Regex.Replace(
-                connectionString,
-                @"(Password|PWD)=([^;]*)",
-                "$1=*****",
-                RegexOptions.IgnoreCase);
-
-            // Sanitize user secrets
-            sanitized = Regex.Replace(
-                sanitized,
-                @"(User ID|UID)=([^;]*)",
-                "$1=*****",
-                RegexOptions.IgnoreCase);
-
-            // Sanitize access keys
-            sanitized = Regex.Replace(
-                sanitized,
-                @"(AccountKey|AccessKey)=([^;]*)",
-                "$1=*****",
-                RegexOptions.IgnoreCase);
-
-            return sanitized;
+            return StringUtilities.SanitizeConnectionString(connectionString);
         }
     }
 

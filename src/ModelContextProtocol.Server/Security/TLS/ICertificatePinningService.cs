@@ -32,12 +32,19 @@ namespace ModelContextProtocol.Server.Security.TLS
         /// </summary>
         /// <returns>An array of pinned certificates</returns>
         Task<X509Certificate2[]> GetPinnedCertificatesAsync();
-        
+
         /// <summary>
         /// Adds a certificate pin
         /// </summary>
         /// <param name="certificate">The certificate to pin</param>
         /// <param name="isPermanent">Whether the pin is permanent</param>
         void AddCertificatePin(X509Certificate2 certificate, bool isPermanent);
+
+        /// <summary>
+        /// Validates a certificate against the pinned certificate
+        /// </summary>
+        /// <param name="certificate">Certificate to validate</param>
+        /// <returns>True if the certificate matches the pinned certificate, false otherwise</returns>
+        Task<bool> ValidatePinAsync(X509Certificate2 certificate);
     }
 }

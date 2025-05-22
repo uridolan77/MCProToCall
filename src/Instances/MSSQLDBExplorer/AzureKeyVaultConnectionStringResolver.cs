@@ -1,7 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using ModelContextProtocol.Extensions.Utilities;
 using PPrePorter.Core.Interfaces;
 
 namespace PPrePorter.Core.Services
@@ -13,6 +17,8 @@ namespace PPrePorter.Core.Services
     {
         private readonly ILogger<AzureKeyVaultConnectionStringResolver> _logger;
         private readonly IAzureKeyVaultService _keyVaultService;
+        private readonly IConfiguration _configuration;
+        private readonly ConnectionStringResolverOptions _options;
 
         // Regex to find placeholders like {azurevault:vaultName:secretName}
         private static readonly Regex AzureVaultPlaceholderRegex = new(@"\{azurevault:([^:]+):([^}]+)\}", RegexOptions.IgnoreCase);
@@ -22,10 +28,14 @@ namespace PPrePorter.Core.Services
         /// </summary>
         public AzureKeyVaultConnectionStringResolver(
             ILogger<AzureKeyVaultConnectionStringResolver> logger,
-            IAzureKeyVaultService keyVaultService)
+            IAzureKeyVaultService keyVaultService,
+            IConfiguration configuration,
+            IOptions<ConnectionStringResolverOptions> options)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _keyVaultService = keyVaultService ?? throw new ArgumentNullException(nameof(keyVaultService));
+            _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+            _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         }
 
         /// <summary>
@@ -75,67 +85,74 @@ namespace PPrePorter.Core.Services
 
                     // Replace the placeholder with the actual value
                     resolvedConnectionString = resolvedConnectionString.Replace(placeholder, secretValue);
-                    
+
                     // Log success (without revealing the actual value)
                     string logValue = secretName.Contains("Password") ? "***" : secretValue;
-                    _logger.LogInformation("Successfully resolved placeholder for '{SecretName}' from vault '{VaultName}': {Value}", 
+                    _logger.LogInformation("Successfully resolved placeholder for '{SecretName}' from vault '{VaultName}': {Value}",
                         secretName, vaultName, logValue);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error retrieving secret '{SecretName}' from vault '{VaultName}'", secretName, vaultName);
-                    
-                    // For specific secrets, provide fallback values
-                    if (secretName == "DailyActionsDB--Username")
+
+                    // Try to get fallback value from environment variables
+                    string fallbackValue = null;
+
+                    if (_options.UseEnvironmentVariablesFallback)
                     {
-                        _logger.LogWarning("Using fallback value for '{SecretName}'", secretName);
-                        resolvedConnectionString = resolvedConnectionString.Replace(placeholder, "ReportsUser");
+                        string envVarName;
+
+                        // Check if we have a mapping for this secret
+                        if (_options.SecretToEnvironmentMapping.TryGetValue(secretName, out string mappedEnvVar))
+                        {
+                            envVarName = mappedEnvVar;
+                        }
+                        else
+                        {
+                            // Use the default naming convention
+                            envVarName = $"{_options.EnvironmentVariablePrefix}{secretName.Replace("--", "_").ToUpperInvariant()}";
+                        }
+
+                        fallbackValue = Environment.GetEnvironmentVariable(envVarName);
+
+                        if (!string.IsNullOrEmpty(fallbackValue))
+                        {
+                            _logger.LogWarning("Using fallback value from environment variable for '{SecretName}'", secretName);
+                            resolvedConnectionString = resolvedConnectionString.Replace(placeholder, fallbackValue);
+                            continue;
+                        }
                     }
-                    else if (secretName == "DailyActionsDB--Password")
+
+                    // Try to get fallback value from configuration
+                    if (_options.UseConfigurationFallback)
                     {
-                        _logger.LogWarning("Using fallback value for '{SecretName}'", secretName);
-                        resolvedConnectionString = resolvedConnectionString.Replace(placeholder, "Pp@123456");
+                        fallbackValue = _configuration[$"Fallbacks:{secretName}"];
+
+                        if (!string.IsNullOrEmpty(fallbackValue))
+                        {
+                            _logger.LogWarning("Using fallback value from configuration for '{SecretName}'", secretName);
+                            resolvedConnectionString = resolvedConnectionString.Replace(placeholder, fallbackValue);
+                            continue;
+                        }
                     }
-                    else
+
+                    // If we couldn't find a fallback value and we're configured to throw
+                    if (_options.ThrowOnResolutionFailure)
                     {
-                        throw;
+                        _logger.LogError("No fallback value found for '{SecretName}' and ThrowOnResolutionFailure is enabled", secretName);
+                        throw new SecretResolutionException($"Failed to resolve secret '{secretName}' and no fallback was available", ex);
                     }
+
+                    // If we get here, we couldn't find a fallback value but we're not configured to throw
+                    _logger.LogWarning("No fallback value found for '{SecretName}', leaving placeholder unresolved", secretName);
                 }
             }
 
             // Log the resolved connection string (without sensitive info)
-            string sanitizedConnectionString = SanitizeConnectionString(resolvedConnectionString);
+            string sanitizedConnectionString = StringUtilities.SanitizeConnectionString(resolvedConnectionString);
             _logger.LogInformation("Finished resolving connection string. Result: {ConnectionString}", sanitizedConnectionString);
 
             return resolvedConnectionString;
-        }
-
-        /// <summary>
-        /// Helper method to sanitize connection strings by hiding sensitive information
-        /// </summary>
-        private static string SanitizeConnectionString(string connectionString)
-        {
-            if (string.IsNullOrEmpty(connectionString))
-                return connectionString;
-
-            if (connectionString.Contains("password=", StringComparison.OrdinalIgnoreCase))
-            {
-                // Simple string replacement
-                int startIndex = connectionString.IndexOf("password=", StringComparison.OrdinalIgnoreCase);
-                if (startIndex >= 0)
-                {
-                    int endIndex = connectionString.IndexOf(';', startIndex);
-                    if (endIndex < 0)
-                        endIndex = connectionString.Length;
-
-                    // Build the sanitized string
-                    var prefix = connectionString[..startIndex];
-                    var suffix = endIndex < connectionString.Length ? connectionString[endIndex..] : "";
-                    return prefix + "password=***" + suffix;
-                }
-            }
-
-            return connectionString;
         }
     }
 }

@@ -15,6 +15,7 @@ namespace ModelContextProtocol.Extensions.Security
         private readonly ILogger<CertificateValidator> _logger;
         private readonly ICertificateRevocationChecker _revocationChecker;
         private readonly ICertificatePinningService _pinningService;
+        private readonly ICertificateTransparencyVerifier _transparencyVerifier;
         private readonly TlsOptions _tlsOptions;
 
         /// <summary>
@@ -24,11 +25,13 @@ namespace ModelContextProtocol.Extensions.Security
             ILogger<CertificateValidator> logger,
             ICertificateRevocationChecker revocationChecker,
             ICertificatePinningService pinningService,
+            ICertificateTransparencyVerifier transparencyVerifier,
             IOptions<TlsOptions> tlsOptions)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _revocationChecker = revocationChecker ?? throw new ArgumentNullException(nameof(revocationChecker));
             _pinningService = pinningService ?? throw new ArgumentNullException(nameof(pinningService));
+            _transparencyVerifier = transparencyVerifier ?? throw new ArgumentNullException(nameof(transparencyVerifier));
             _tlsOptions = tlsOptions?.Value ?? throw new ArgumentNullException(nameof(tlsOptions));
         }
 
@@ -138,6 +141,34 @@ namespace ModelContextProtocol.Extensions.Security
                 if (!_revocationChecker.ValidateCertificateNotRevoked(certificate))
                 {
                     _logger.LogWarning("Certificate validation failed: Certificate is revoked");
+                    return false;
+                }
+            }
+
+            // Check Certificate Transparency if enabled
+            if (_tlsOptions.CertificateTransparencyOptions.VerifyCertificateTransparency)
+            {
+                // Check for embedded SCTs if required
+                if (_tlsOptions.CertificateTransparencyOptions.RequireEmbeddedScts)
+                {
+                    if (!_transparencyVerifier.HasEmbeddedScts(certificate))
+                    {
+                        _logger.LogWarning("Certificate validation failed: No embedded SCTs found");
+                        return false;
+                    }
+                }
+
+                // Verify in CT logs
+                var ctVerificationTask = _transparencyVerifier.VerifyCertificateInCtLogsAsync(certificate);
+                if (!ctVerificationTask.Wait(TimeSpan.FromSeconds(_tlsOptions.RevocationOptions.RevocationCheckTimeoutSeconds)))
+                {
+                    _logger.LogWarning("Certificate Transparency verification timed out");
+                    return _tlsOptions.CertificateTransparencyOptions.AllowWhenCtUnavailable;
+                }
+
+                if (!ctVerificationTask.Result)
+                {
+                    _logger.LogWarning("Certificate validation failed: Not found in Certificate Transparency logs");
                     return false;
                 }
             }

@@ -74,7 +74,7 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
             IConfiguration configuration)
         {
             // Configure JWT options from appsettings
-            services.Configure<JwtOptions>(options =>
+            services.Configure<ModelContextProtocol.Extensions.Security.Authentication.JwtOptions>(options =>
             {
                 var jwtSection = configuration.GetSection("McpServer:JwtAuth");
                 options.SecretKey = jwtSection["SecretKey"];
@@ -93,7 +93,7 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
             });
 
             // Register token services
-            services.AddSingleton<ITokenStore, InMemoryTokenStore>();
+            services.AddSingleton<ModelContextProtocol.Extensions.Security.Authentication.ITokenStore, ModelContextProtocol.Extensions.Security.Authentication.InMemoryTokenStore>();
             services.AddSingleton<ModelContextProtocol.Extensions.Security.Authentication.IJwtTokenProvider, ModelContextProtocol.Extensions.Security.Authentication.JwtTokenProvider>();
 
             return services;
@@ -178,7 +178,7 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
 
             // Register security services
             services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificateValidator, ModelContextProtocol.Extensions.Security.CertificateValidator>();
-            services.AddSingleton<ICertificateRevocationChecker, CertificateRevocationChecker>();
+            services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificateRevocationChecker, ModelContextProtocol.Extensions.Security.CertificateRevocationChecker>();
             services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificatePinningService, ModelContextProtocol.Extensions.Security.CertificatePinningService>();
             services.AddSingleton(typeof(ModelContextProtocol.Extensions.Security.TlsConnectionManager));
 
@@ -187,8 +187,8 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
             if (authEnabled)
             {
                 services.AddSingleton<ModelContextProtocol.Extensions.Security.Authentication.IJwtTokenProvider, ModelContextProtocol.Extensions.Security.Authentication.JwtTokenProvider>();
-                services.AddSingleton<ITokenStore, InMemoryTokenStore>();
-                services.AddSingleton<AuthorizationMiddleware>();
+                services.AddSingleton<ModelContextProtocol.Extensions.Security.Authentication.ITokenStore, ModelContextProtocol.Extensions.Security.Authentication.InMemoryTokenStore>();
+                services.AddSingleton<ModelContextProtocol.Server.Security.Authentication.AuthorizationMiddleware>();
                 services.AddSingleton<IInputValidator>(provider =>
                 new InputValidator(provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<InputValidator>>()));
             }
@@ -214,7 +214,7 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
 
             // Register security services
             services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificateValidator, ModelContextProtocol.Extensions.Security.CertificateValidator>();
-            services.AddSingleton<ICertificateRevocationChecker, CertificateRevocationChecker>();
+            services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificateRevocationChecker, ModelContextProtocol.Extensions.Security.CertificateRevocationChecker>();
             services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificatePinningService, ModelContextProtocol.Extensions.Security.CertificatePinningService>();
             services.AddSingleton(typeof(ModelContextProtocol.Extensions.Security.TlsConnectionManager));
 
@@ -246,7 +246,7 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
 
             // Register certificate validation services
             services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificateValidator, ModelContextProtocol.Extensions.Security.CertificateValidator>();
-            services.AddSingleton<ICertificateRevocationChecker, CertificateRevocationChecker>();
+            services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificateRevocationChecker, ModelContextProtocol.Extensions.Security.CertificateRevocationChecker>();
             services.AddSingleton<ModelContextProtocol.Extensions.Security.ICertificatePinningService, ModelContextProtocol.Extensions.Security.CertificatePinningService>();
 
             return services;

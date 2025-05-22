@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Extensions.Utilities;
 using PPrePorter.Core.Interfaces;
 using System;
 using System.Collections.Concurrent;
@@ -98,7 +99,7 @@ namespace PPrePorter.Core.Services
                     _connectionStringCache.TryAdd(templateCacheKey, resolved);
 
                     // Log the resolved connection string (without sensitive info)
-                    string sanitizedConnectionString = SanitizeConnectionString(resolved);
+                    string sanitizedConnectionString = StringUtilities.SanitizeConnectionString(resolved);
                     _logger.LogInformation("Pre-resolved connection string '{Name}': {ConnectionString}", name, sanitizedConnectionString);
 
                     // Log cache status
@@ -274,38 +275,10 @@ namespace PPrePorter.Core.Services
             _connectionStringCache.TryAdd(templateCacheKey, resolvedConnectionString);
 
             // Log the resolved connection string (without sensitive info)
-            string sanitizedConnectionString = SanitizeConnectionString(resolvedConnectionString);
+            string sanitizedConnectionString = StringUtilities.SanitizeConnectionString(resolvedConnectionString);
             _logger.LogInformation("Finished resolving connection string template. Result: {ConnectionString}", sanitizedConnectionString);
 
             return resolvedConnectionString;
-        }
-
-        /// <summary>
-        /// Helper method to sanitize connection strings by hiding sensitive information
-        /// </summary>
-        private static string SanitizeConnectionString(string connectionString)
-        {
-            if (string.IsNullOrEmpty(connectionString))
-                return connectionString;
-
-            if (connectionString.Contains("password="))
-            {
-                // Simple string replacement
-                int startIndex = connectionString.IndexOf("password=");
-                if (startIndex >= 0)
-                {
-                    int endIndex = connectionString.IndexOf(';', startIndex);
-                    if (endIndex < 0)
-                        endIndex = connectionString.Length;
-
-                    // Build the sanitized string
-                    var prefix = connectionString[..startIndex];
-                    var suffix = endIndex < connectionString.Length ? connectionString[endIndex..] : "";
-                    return prefix + "password=***" + suffix;
-                }
-            }
-
-            return connectionString;
         }
 
         /// <summary>
@@ -318,7 +291,7 @@ namespace PPrePorter.Core.Services
 
             foreach (var entry in _connectionStringCache)
             {
-                string sanitizedValue = SanitizeConnectionString(entry.Value);
+                string sanitizedValue = StringUtilities.SanitizeConnectionString(entry.Value);
                 _logger.LogInformation("Cache entry: {Key} => {Value}", entry.Key, sanitizedValue);
             }
 
