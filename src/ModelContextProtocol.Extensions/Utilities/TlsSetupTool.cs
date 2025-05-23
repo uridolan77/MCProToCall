@@ -163,9 +163,11 @@ namespace ModelContextProtocol.Extensions.Utilities
         }
 
         /// <summary>
-        /// Main entry point for the command line tool
+        /// Run the TLS setup tool with the given arguments
         /// </summary>
-        public static int Main(string[] args)
+        /// <param name="args">Command line arguments</param>
+        /// <returns>Exit code</returns>
+        public static int Run(string[] args)
         {
             // Set up logger
             using var loggerFactory = LoggerFactory.Create(builder =>

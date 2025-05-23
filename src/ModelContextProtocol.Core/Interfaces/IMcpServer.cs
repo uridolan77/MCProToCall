@@ -13,6 +13,11 @@ namespace ModelContextProtocol.Core.Interfaces
     public interface IMcpServer
     {
         /// <summary>
+        /// Gets a value indicating whether the server is currently listening for connections
+        /// </summary>
+        bool IsListening { get; }
+
+        /// <summary>
         /// Starts the MCP server
         /// </summary>
         Task StartAsync();
@@ -21,6 +26,11 @@ namespace ModelContextProtocol.Core.Interfaces
         /// Stops the MCP server
         /// </summary>
         Task StopAsync();
+
+        /// <summary>
+        /// Stops the MCP server synchronously
+        /// </summary>
+        void Stop();
 
         /// <summary>
         /// Registers a method handler

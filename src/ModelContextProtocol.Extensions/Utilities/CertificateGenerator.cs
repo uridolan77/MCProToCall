@@ -67,12 +67,11 @@ namespace ModelContextProtocol.Extensions.Utilities
         }
 
         /// <summary>
-        /// Main entry point for the certificate generator tool
+        /// Generates development certificates for MCP with console logging
         /// </summary>
-        public static void Main(string[] args)
+        /// <param name="outputDirectory">Directory to save certificates</param>
+        public static void GenerateDevelopmentCertificatesWithConsoleLogging(string outputDirectory = ".")
         {
-            string outputDirectory = args.Length > 0 ? args[0] : ".";
-
             // Set up console logger
             using var loggerFactory = LoggerFactory.Create(builder =>
             {
@@ -91,6 +90,7 @@ namespace ModelContextProtocol.Extensions.Utilities
             catch (Exception ex)
             {
                 logger.LogError(ex, "Error generating certificates");
+                throw;
             }
         }
     }

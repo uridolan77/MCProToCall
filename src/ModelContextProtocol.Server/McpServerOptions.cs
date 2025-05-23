@@ -19,6 +19,11 @@ namespace ModelContextProtocol.Server
         public int Port { get; set; } = 8080;
 
         /// <summary>
+        /// Request timeout in seconds (default: 30)
+        /// </summary>
+        public int RequestTimeout { get; set; } = 30;
+
+        /// <summary>
         /// Available resources
         /// </summary>
         public List<McpResource> Resources { get; set; } = new List<McpResource>();

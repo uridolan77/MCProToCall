@@ -163,43 +163,4 @@ namespace ModelContextProtocol.Extensions.Security
         public int RevocationCheckTimeoutSeconds { get; set; } = 15;
     }
 
-    /// <summary>
-    /// Certificate transparency options
-    /// </summary>
-    public class CertificateTransparencyOptions
-    {
-        /// <summary>
-        /// Whether to verify certificates in Certificate Transparency logs
-        /// </summary>
-        public bool VerifyCertificateTransparency { get; set; } = true;
-
-        /// <summary>
-        /// Whether to require SCTs (Signed Certificate Timestamps) in certificates
-        /// </summary>
-        public bool RequireEmbeddedScts { get; set; } = true;
-
-        /// <summary>
-        /// Minimum number of SCTs required for a certificate to be considered valid
-        /// </summary>
-        public int MinimumSctCount { get; set; } = 2;
-
-        /// <summary>
-        /// URL of the CT log API to use for verification
-        /// </summary>
-        public string CtLogApiUrl { get; set; } = "https://ct.googleapis.com/logs/";
-
-        /// <summary>
-        /// Whether to allow certificates when CT verification is unavailable
-        /// </summary>
-        public bool AllowWhenCtUnavailable { get; set; } = false;
-
-        /// <summary>
-        /// List of trusted CT logs
-        /// </summary>
-        public List<string> TrustedCtLogs { get; set; } = new List<string>
-        {
-            "ct.googleapis.com/logs/",
-            "ct.cloudflare.com/logs/"
-        };
-    }
 }

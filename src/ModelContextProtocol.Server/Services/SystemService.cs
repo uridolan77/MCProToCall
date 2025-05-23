@@ -30,16 +30,31 @@ namespace ModelContextProtocol.Server.Services
         public async Task<McpCapabilities> GetCapabilitiesAsync()
         {
             _logger.LogInformation("Retrieving MCP server capabilities");
-            
+
             // Simulate asynchronous operation
             await Task.Delay(100);
-            
+
             return new McpCapabilities
             {
                 Version = "1.0.0",
-                Resources = _options.Resources,
-                Tools = _options.Tools,
-                Prompts = _options.Prompts
+                Resources = new ResourceCapabilities
+                {
+                    Subscribe = true,
+                    ListChanged = true
+                },
+                Tools = new ToolCapabilities
+                {
+                    ListChanged = true
+                },
+                Prompts = new PromptCapabilities
+                {
+                    ListChanged = true
+                },
+                Logging = new LoggingCapabilities
+                {
+                    Enabled = true,
+                    SupportedLevels = new List<string> { "debug", "info", "warn", "error" }
+                }
             };
         }
 
@@ -51,18 +66,18 @@ namespace ModelContextProtocol.Server.Services
         public async Task<string> EchoAsync(string input)
         {
             _logger.LogInformation("Echo request: {Input}", input);
-            
+
             if (string.IsNullOrEmpty(input))
             {
                 throw new McpException(McpException.ErrorCodes.InvalidParams, "Input cannot be empty");
             }
-            
+
             // Simulate asynchronous operation
             await Task.Delay(100);
-            
+
             return input;
         }
-        
+
         /// <summary>
         /// Performs an admin operation (for demonstrating role-based security)
         /// </summary>
@@ -71,18 +86,18 @@ namespace ModelContextProtocol.Server.Services
         public async Task<object> AdminOperationAsync(JsonElement parameters)
         {
             _logger.LogInformation("Admin operation requested");
-            
+
             // Simulate asynchronous operation
             await Task.Delay(200);
-            
-            return new 
-            { 
-                Success = true, 
+
+            return new
+            {
+                Success = true,
                 Message = "Admin operation completed successfully",
                 Timestamp = DateTime.UtcNow
             };
         }
-        
+
         /// <summary>
         /// Returns server status information
         /// </summary>
@@ -90,10 +105,10 @@ namespace ModelContextProtocol.Server.Services
         public async Task<object> GetServerStatusAsync()
         {
             _logger.LogInformation("Server status requested");
-            
+
             // Simulate asynchronous operation
             await Task.Delay(150);
-            
+
             return new
             {
                 Status = "Running",

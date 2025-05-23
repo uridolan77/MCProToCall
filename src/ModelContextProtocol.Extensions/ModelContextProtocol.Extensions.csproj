@@ -33,6 +33,9 @@
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.6.0" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.6.0" />
     <PackageReference Include="Microsoft.AspNetCore.Diagnostics.HealthChecks" Version="2.2.0" />
+    <PackageReference Include="xunit" Version="2.6.1" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
   </ItemGroup>
 
   <ItemGroup>

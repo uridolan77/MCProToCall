@@ -39,7 +39,7 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
             services.AddSingleton(new ResponseCache(TimeSpan.FromMinutes(5)));
 
             // Add connection pooling
-            services.AddSingleton(new McpConnectionPool(TimeSpan.FromMinutes(30)));
+            services.AddSingleton<McpConnectionPool>();
 
             // Add streaming support
             services.AddSingleton<StreamingResponseManager>();

@@ -42,6 +42,11 @@ namespace ModelContextProtocol.Server
         private bool _disposed;
         private X509Certificate2 _serverCertificate;
 
+        /// <summary>
+        /// Gets a value indicating whether the server is currently listening for connections
+        /// </summary>
+        public bool IsListening => _httpListener?.IsListening ?? false;
+
         public McpServer(
             IOptions<McpServerOptions> options,
             ILogger<McpServer> logger,

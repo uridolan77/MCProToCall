@@ -7,6 +7,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol.Extensions.Utilities;
 using PPrePorter.Core.Interfaces;
+using Polly;
+using Polly.Extensions.Http;
+using System.Net;
+using System.ComponentModel.DataAnnotations;
 
 namespace PPrePorter.Core.Services
 {
@@ -19,6 +23,7 @@ namespace PPrePorter.Core.Services
         private readonly IAzureKeyVaultService _keyVaultService;
         private readonly IConfiguration _configuration;
         private readonly ConnectionStringResolverOptions _options;
+        private readonly IAsyncPolicy _retryPolicy;
 
         // Regex to find placeholders like {azurevault:vaultName:secretName}
         private static readonly Regex AzureVaultPlaceholderRegex = new(@"\{azurevault:([^:]+):([^}]+)\}", RegexOptions.IgnoreCase);
@@ -36,6 +41,22 @@ namespace PPrePorter.Core.Services
             _keyVaultService = keyVaultService ?? throw new ArgumentNullException(nameof(keyVaultService));
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+
+            // Initialize retry policy for Key Vault operations
+            _retryPolicy = Policy
+                .Handle<Exception>(ex => ShouldRetry(ex))
+                .WaitAndRetryAsync(
+                    retryCount: _options.MaxRetryAttempts,
+                    sleepDurationProvider: retryAttempt => TimeSpan.FromMilliseconds(
+                        _options.BaseRetryDelayMs * Math.Pow(_options.RetryBackoffMultiplier, retryAttempt - 1)),
+                    onRetry: (outcome, timespan, retryAttempt, context) =>
+                    {
+                        _logger.LogWarning(outcome.Exception,
+                            "Key Vault operation failed, retry attempt {RetryAttempt}/{MaxRetries} in {DelayMs}ms",
+                            retryAttempt, _options.MaxRetryAttempts, timespan.TotalMilliseconds);
+                    });
+
+            ValidateOptions();
         }
 
         /// <summary>
@@ -73,9 +94,9 @@ namespace PPrePorter.Core.Services
 
                 try
                 {
-                    // Retrieve from Azure Key Vault
+                    // Retrieve from Azure Key Vault with retry logic
                     _logger.LogInformation("Retrieving secret '{SecretName}' from vault '{VaultName}'", secretName, vaultName);
-                    string secretValue = await _keyVaultService.GetSecretAsync(vaultName, secretName);
+                    string secretValue = await GetSecretWithRetryAsync(vaultName, secretName);
 
                     if (string.IsNullOrEmpty(secretValue))
                     {
@@ -153,6 +174,61 @@ namespace PPrePorter.Core.Services
             _logger.LogInformation("Finished resolving connection string. Result: {ConnectionString}", sanitizedConnectionString);
 
             return resolvedConnectionString;
+        }
+
+        /// <summary>
+        /// Validates the configuration options
+        /// </summary>
+        private void ValidateOptions()
+        {
+            var results = new List<ValidationResult>();
+            var context = new ValidationContext(_options);
+
+            if (!Validator.TryValidateObject(_options, context, results, true))
+            {
+                var errors = string.Join(", ", results.Select(r => r.ErrorMessage));
+                throw new ArgumentException($"Invalid ConnectionStringResolverOptions: {errors}");
+            }
+
+            _logger.LogInformation("Connection string resolver options validated successfully");
+        }
+
+        /// <summary>
+        /// Determines if an exception should trigger a retry
+        /// </summary>
+        private static bool ShouldRetry(Exception ex)
+        {
+            // Retry on network errors, timeouts, and transient Azure service errors
+            return ex is System.Net.Http.HttpRequestException ||
+                   ex is TaskCanceledException ||
+                   ex is TimeoutException ||
+                   (ex is Azure.RequestFailedException azureEx && 
+                    (azureEx.Status == (int)HttpStatusCode.TooManyRequests ||
+                     azureEx.Status == (int)HttpStatusCode.InternalServerError ||
+                     azureEx.Status == (int)HttpStatusCode.BadGateway ||
+                     azureEx.Status == (int)HttpStatusCode.ServiceUnavailable ||
+                     azureEx.Status == (int)HttpStatusCode.GatewayTimeout));
+        }
+
+        /// <summary>
+        /// Retrieves a secret from Key Vault with retry logic
+        /// </summary>
+        private async Task<string> GetSecretWithRetryAsync(string vaultName, string secretName)
+        {
+            return await _retryPolicy.ExecuteAsync(async () =>
+            {
+                _logger.LogDebug("Attempting to retrieve secret '{SecretName}' from vault '{VaultName}'", 
+                    secretName, vaultName);
+                
+                var secretValue = await _keyVaultService.GetSecretAsync(vaultName, secretName);
+                
+                if (string.IsNullOrEmpty(secretValue))
+                {
+                    throw new SecretResolutionException($"Secret '{secretName}' returned null or empty value from vault '{vaultName}'");
+                }
+
+                return secretValue;
+            });
         }
     }
 }
