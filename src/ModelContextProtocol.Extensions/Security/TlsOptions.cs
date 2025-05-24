@@ -79,6 +79,26 @@ namespace ModelContextProtocol.Extensions.Security
         /// Certificate transparency options
         /// </summary>
         public CertificateTransparencyOptions CertificateTransparencyOptions { get; set; } = new CertificateTransparencyOptions();
+
+        /// <summary>
+        /// Hardware Security Module options
+        /// </summary>
+        public HsmOptions HsmOptions { get; set; } = new HsmOptions();
+
+        /// <summary>
+        /// Protocol negotiation options
+        /// </summary>
+        public ProtocolNegotiationOptions ProtocolNegotiation { get; set; } = new ProtocolNegotiationOptions();
+
+        /// <summary>
+        /// Bulkhead isolation options
+        /// </summary>
+        public BulkheadOptions BulkheadOptions { get; set; } = new BulkheadOptions();
+
+        /// <summary>
+        /// Request hedging options
+        /// </summary>
+        public HedgingOptions HedgingOptions { get; set; } = new HedgingOptions();
     }
 
     /// <summary>
@@ -163,4 +183,132 @@ namespace ModelContextProtocol.Extensions.Security
         public int RevocationCheckTimeoutSeconds { get; set; } = 15;
     }
 
+    /// <summary>
+    /// Hardware Security Module options
+    /// </summary>
+    public class HsmOptions
+    {
+        /// <summary>
+        /// Whether to use Hardware Security Module
+        /// </summary>
+        public bool UseHsm { get; set; } = false;
+
+        /// <summary>
+        /// HSM provider type (AzureKeyVault, PKCS11, etc.)
+        /// </summary>
+        public string ProviderType { get; set; } = "AzureKeyVault";
+
+        /// <summary>
+        /// HSM connection string or configuration
+        /// </summary>
+        public string ConnectionString { get; set; }
+
+        /// <summary>
+        /// Certificate identifier in HSM
+        /// </summary>
+        public string CertificateIdentifier { get; set; }
+
+        /// <summary>
+        /// Key identifier for signing operations
+        /// </summary>
+        public string SigningKeyIdentifier { get; set; }
+
+        /// <summary>
+        /// Key identifier for encryption operations
+        /// </summary>
+        public string EncryptionKeyIdentifier { get; set; }
+
+        /// <summary>
+        /// Timeout for HSM operations in seconds
+        /// </summary>
+        public int OperationTimeoutSeconds { get; set; } = 30;
+    }
+
+    /// <summary>
+    /// Protocol negotiation options
+    /// </summary>
+    public class ProtocolNegotiationOptions
+    {
+        /// <summary>
+        /// Whether to enable protocol negotiation
+        /// </summary>
+        public bool EnableNegotiation { get; set; } = true;
+
+        /// <summary>
+        /// Supported protocols in order of preference
+        /// </summary>
+        public List<string> SupportedProtocols { get; set; } = new List<string>
+        {
+            "json-rpc",
+            "msgpack",
+            "grpc"
+        };
+
+        /// <summary>
+        /// Default protocol if negotiation fails
+        /// </summary>
+        public string DefaultProtocol { get; set; } = "json-rpc";
+
+        /// <summary>
+        /// Negotiation timeout in seconds
+        /// </summary>
+        public int NegotiationTimeoutSeconds { get; set; } = 5;
+    }
+
+    /// <summary>
+    /// Bulkhead isolation options
+    /// </summary>
+    public class BulkheadOptions
+    {
+        /// <summary>
+        /// Whether to enable bulkhead isolation
+        /// </summary>
+        public bool EnableBulkhead { get; set; } = true;
+
+        /// <summary>
+        /// Maximum concurrent executions
+        /// </summary>
+        public int MaxConcurrentExecutions { get; set; } = 100;
+
+        /// <summary>
+        /// Maximum queue size
+        /// </summary>
+        public int MaxQueueSize { get; set; } = 1000;
+
+        /// <summary>
+        /// Queue timeout in seconds
+        /// </summary>
+        public int QueueTimeoutSeconds { get; set; } = 30;
+    }
+
+    /// <summary>
+    /// Request hedging options
+    /// </summary>
+    public class HedgingOptions
+    {
+        /// <summary>
+        /// Whether to enable request hedging
+        /// </summary>
+        public bool EnableHedging { get; set; } = false;
+
+        /// <summary>
+        /// Delay before starting hedged request in milliseconds
+        /// </summary>
+        public int HedgingDelayMs { get; set; } = 100;
+
+        /// <summary>
+        /// Maximum number of hedged requests
+        /// </summary>
+        public int MaxHedgedRequests { get; set; } = 2;
+
+        /// <summary>
+        /// Operations that support hedging
+        /// </summary>
+        public List<string> HedgedOperations { get; set; } = new List<string>
+        {
+            "tools/call",
+            "resources/read",
+            "prompts/get"
+        };
+    }
 }

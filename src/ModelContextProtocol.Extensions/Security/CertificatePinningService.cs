@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol.Server;
@@ -34,7 +35,7 @@ namespace ModelContextProtocol.Extensions.Security
             _tlsOptions = tlsOptions?.Value ?? throw new ArgumentNullException(nameof(tlsOptions));
 
             // Initialize by loading any configured pins
-            LoadPinnedCertificates();
+            LoadPinnedCertificatesInternal();
         }
 
         /// <summary>
@@ -134,7 +135,7 @@ namespace ModelContextProtocol.Extensions.Security
 
                     if (isPermanent)
                     {
-                        SavePinnedCertificates();
+                        SavePinnedCertificatesInternal();
                     }
                 }
 
@@ -164,7 +165,7 @@ namespace ModelContextProtocol.Extensions.Security
                 if (removed)
                 {
                     _logger.LogInformation("Removed certificate {Thumbprint} from pinned certificates list", thumbprint);
-                    SavePinnedCertificates();
+                    SavePinnedCertificatesInternal();
                 }
 
                 return removed;
@@ -187,6 +188,71 @@ namespace ModelContextProtocol.Extensions.Security
             }
 
             return _pinnedCertificates.ContainsKey(thumbprint);
+        }
+
+        /// <summary>
+        /// Validates a certificate pin asynchronously
+        /// </summary>
+        public async Task<bool> ValidatePinAsync(X509Certificate2 certificate)
+        {
+            return await Task.FromResult(ValidateCertificatePin(certificate));
+        }
+
+        /// <summary>
+        /// Pins a certificate asynchronously
+        /// </summary>
+        public async Task<bool> PinCertificateAsync(X509Certificate2 certificate)
+        {
+            return await Task.FromResult(AddCertificatePin(certificate, true));
+        }
+
+        /// <summary>
+        /// Loads pinned certificates from storage
+        /// </summary>
+        public bool LoadPinnedCertificates()
+        {
+            try
+            {
+                LoadPinnedCertificatesInternal();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Saves pinned certificates to storage
+        /// </summary>
+        public bool SavePinnedCertificates()
+        {
+            try
+            {
+                SavePinnedCertificatesInternal();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Pins a certificate (interface implementation)
+        /// </summary>
+        public bool PinCertificate(X509Certificate2 certificate)
+        {
+            return AddCertificatePin(certificate, true);
+        }
+
+        /// <summary>
+        /// Unpins a certificate (interface implementation)
+        /// </summary>
+        public bool UnpinCertificate(X509Certificate2 certificate)
+        {
+            if (certificate == null) return false;
+            return RemoveCertificatePin(certificate.Thumbprint);
         }
 
         /// <summary>
@@ -214,7 +280,7 @@ namespace ModelContextProtocol.Extensions.Security
         /// <summary>
         /// Loads pinned certificates from persistent storage
         /// </summary>
-        private void LoadPinnedCertificates()
+        private void LoadPinnedCertificatesInternal()
         {
             try
             {
@@ -274,7 +340,7 @@ namespace ModelContextProtocol.Extensions.Security
         /// <summary>
         /// Saves pinned certificates to persistent storage
         /// </summary>
-        private void SavePinnedCertificates()
+        private void SavePinnedCertificatesInternal()
         {
             try
             {
