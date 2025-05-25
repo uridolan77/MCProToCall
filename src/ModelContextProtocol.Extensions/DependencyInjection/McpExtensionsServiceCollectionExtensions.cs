@@ -144,6 +144,8 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
             if (observabilityOptions.EnableMetrics)
             {
                 services.AddSingleton<EnhancedMcpTelemetry>();
+                services.AddSingleton<ModelContextProtocol.Extensions.Observability.McpAdvancedTelemetry>();
+                services.AddSingleton<ModelContextProtocol.Extensions.Observability.IAlertingService, ModelContextProtocol.Extensions.Observability.AlertingService>();
             }
 
             if (observabilityOptions.EnableHealthChecks)
@@ -173,6 +175,27 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
             {
                 services.AddSingleton<DistributedConfigurationProvider>();
             }
+
+            // Add secrets management
+            services.AddSingleton<ModelContextProtocol.Extensions.Configuration.ISecretsManager, ModelContextProtocol.Extensions.Configuration.AzureKeyVaultSecretsManager>();
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds advanced caching services
+        /// </summary>
+        public static IServiceCollection AddMcpCaching(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            services.Configure<ModelContextProtocol.Extensions.Caching.MultiTierCacheOptions>(
+                configuration.GetSection("McpExtensions:Caching"));
+            services.Configure<ModelContextProtocol.Extensions.Caching.CacheInvalidationOptions>(
+                configuration.GetSection("McpExtensions:CacheInvalidation"));
+
+            services.AddSingleton<ModelContextProtocol.Extensions.Caching.ICacheInvalidationService, ModelContextProtocol.Extensions.Caching.CacheInvalidationService>();
+            services.AddSingleton<ModelContextProtocol.Extensions.Caching.IDistributedMcpCache, ModelContextProtocol.Extensions.Caching.MultiTierMcpCache>();
 
             return services;
         }
