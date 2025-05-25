@@ -12,8 +12,11 @@ using ModelContextProtocol.Extensions.Testing;
 using ModelContextProtocol.Extensions.WebSocket;
 using ModelContextProtocol.Extensions.Documentation;
 using ModelContextProtocol.Extensions.Lifecycle;
+using ModelContextProtocol.Extensions.Security.HSM;
+using ModelContextProtocol.Extensions.Validation;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using ModelContextProtocol.Core.Performance;
 
 namespace ModelContextProtocol.Extensions.DependencyInjection
@@ -462,5 +465,97 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
         public TimeSpan GracefulShutdownTimeout { get; set; } = TimeSpan.FromSeconds(30);
         public TimeSpan ForceShutdownTimeout { get; set; } = TimeSpan.FromSeconds(60);
         public bool EnableGracefulShutdown { get; set; } = true;
+    }
+
+    /// <summary>
+    /// Comprehensive MCP extensions options with validation
+    /// </summary>
+    public class McpExtensionsOptions : IValidatableObject
+    {
+        public SecurityOptions Security { get; set; } = new();
+        public ResilienceOptions Resilience { get; set; } = new();
+        public ObservabilityOptions Observability { get; set; } = new();
+        public ConfigurationOptions Configuration { get; set; } = new();
+        public ValidationOptions Validation { get; set; } = new();
+
+        public IEnumerable<System.ComponentModel.DataAnnotations.ValidationResult> Validate(ValidationContext validationContext)
+        {
+            var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+
+            // Cross-cutting validation logic
+            if (Security.EnableHsm && string.IsNullOrEmpty(Security.HsmConnectionString))
+            {
+                results.Add(new System.ComponentModel.DataAnnotations.ValidationResult(
+                    "HSM connection string is required when HSM is enabled",
+                    new[] { nameof(Security.HsmConnectionString) }));
+            }
+
+            if (Resilience.EnableRateLimiting && Resilience.RateLimitOptions == null)
+            {
+                results.Add(new System.ComponentModel.DataAnnotations.ValidationResult(
+                    "Rate limit options are required when rate limiting is enabled",
+                    new[] { nameof(Resilience.RateLimitOptions) }));
+            }
+
+            return results;
+        }
+    }
+
+    /// <summary>
+    /// Enhanced security options with HSM support
+    /// </summary>
+    public class SecurityOptions
+    {
+        public bool EnableCertificateValidation { get; set; } = true;
+        public bool EnableCertificatePinning { get; set; } = false;
+        public bool EnableRevocationChecking { get; set; } = true;
+        public bool EnableHsm { get; set; } = false;
+        public string HsmConnectionString { get; set; }
+        public string HsmProviderType { get; set; } = "AzureKeyVault";
+    }
+
+    /// <summary>
+    /// Enhanced resilience options with adaptive capabilities
+    /// </summary>
+    public class ResilienceOptions
+    {
+        public bool EnableRateLimiting { get; set; } = true;
+        public string RateLimitingType { get; set; } = "TokenBucket";
+        public bool EnableCircuitBreaker { get; set; } = true;
+        public bool EnableBulkhead { get; set; } = true;
+        public RateLimitOptions RateLimitOptions { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Enhanced observability options
+    /// </summary>
+    public class ObservabilityOptions
+    {
+        public bool EnableMetrics { get; set; } = true;
+        public bool EnableTracing { get; set; } = true;
+        public bool EnableLogging { get; set; } = true;
+        public bool EnableHealthChecks { get; set; } = true;
+        public string ServiceName { get; set; } = "MCP-Service";
+    }
+
+    /// <summary>
+    /// Enhanced configuration options
+    /// </summary>
+    public class ConfigurationOptions
+    {
+        public bool EnableHotReload { get; set; } = true;
+        public bool EnableValidation { get; set; } = true;
+        public bool EnableDistributedConfig { get; set; } = false;
+        public string[] ConfigurationEndpoints { get; set; } = Array.Empty<string>();
+    }
+
+    /// <summary>
+    /// Enhanced validation options
+    /// </summary>
+    public class ValidationOptions
+    {
+        public bool EnableEnvironmentValidation { get; set; } = true;
+        public bool EnableSchemaValidation { get; set; } = true;
+        public bool EnableCrossValidation { get; set; } = true;
     }
 }

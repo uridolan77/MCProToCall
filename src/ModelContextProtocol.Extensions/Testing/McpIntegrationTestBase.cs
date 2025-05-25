@@ -316,4 +316,81 @@ namespace ModelContextProtocol.Extensions.Testing
             Assert.IsType<ModelContextProtocol.Core.Models.JsonRpc.JsonRpcResponse>(response);
         }
     }
+
+    /// <summary>
+    /// Behavior-driven test extensions for fluent test writing
+    /// </summary>
+    public static class BehaviorTestExtensions
+    {
+        /// <summary>
+        /// Starts a behavior-driven test with a given setup
+        /// </summary>
+        public static async Task<TResult> Given<TResult>(this Task<TResult> setup, string description)
+        {
+            Console.WriteLine($"Given: {description}");
+            return await setup;
+        }
+
+        /// <summary>
+        /// Performs an action in the behavior-driven test
+        /// </summary>
+        public static async Task<TResult> When<T, TResult>(this Task<T> given, Func<T, Task<TResult>> action, string description)
+        {
+            Console.WriteLine($"When: {description}");
+            var input = await given;
+            return await action(input);
+        }
+
+        /// <summary>
+        /// Performs a synchronous action in the behavior-driven test
+        /// </summary>
+        public static async Task<TResult> When<T, TResult>(this Task<T> given, Func<T, TResult> action, string description)
+        {
+            Console.WriteLine($"When: {description}");
+            var input = await given;
+            return action(input);
+        }
+
+        /// <summary>
+        /// Asserts the result of a behavior-driven test
+        /// </summary>
+        public static async Task Then<T>(this Task<T> when, Action<T> assertion, string description)
+        {
+            Console.WriteLine($"Then: {description}");
+            var result = await when;
+            assertion(result);
+        }
+
+        /// <summary>
+        /// Asserts the result of a behavior-driven test asynchronously
+        /// </summary>
+        public static async Task Then<T>(this Task<T> when, Func<T, Task> assertion, string description)
+        {
+            Console.WriteLine($"Then: {description}");
+            var result = await when;
+            await assertion(result);
+        }
+
+        /// <summary>
+        /// Adds additional context to a behavior-driven test
+        /// </summary>
+        public static async Task<T> And<T>(this Task<T> previous, Action<T> action, string description)
+        {
+            Console.WriteLine($"And: {description}");
+            var result = await previous;
+            action(result);
+            return result;
+        }
+
+        /// <summary>
+        /// Adds additional asynchronous context to a behavior-driven test
+        /// </summary>
+        public static async Task<T> And<T>(this Task<T> previous, Func<T, Task> action, string description)
+        {
+            Console.WriteLine($"And: {description}");
+            var result = await previous;
+            await action(result);
+            return result;
+        }
+    }
 }

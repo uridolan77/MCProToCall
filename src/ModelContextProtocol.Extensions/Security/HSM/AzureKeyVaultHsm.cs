@@ -14,23 +14,23 @@ namespace ModelContextProtocol.Extensions.Security.HSM
     public class AzureKeyVaultHsm : IHardwareSecurityModule
     {
         private readonly ILogger<AzureKeyVaultHsm> _logger;
-        private readonly HsmOptions _options;
+        private readonly ModelContextProtocol.Extensions.Security.HSM.HsmOptions _options;
         private readonly string _vaultUrl;
 
         public AzureKeyVaultHsm(
             ILogger<AzureKeyVaultHsm> logger,
-            IOptions<TlsOptions> tlsOptions)
+            IOptions<ModelContextProtocol.Extensions.Security.HSM.HsmOptions> hsmOptions)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _options = tlsOptions?.Value?.HsmOptions ?? throw new ArgumentNullException(nameof(tlsOptions));
-            
+            _options = hsmOptions?.Value ?? throw new ArgumentNullException(nameof(hsmOptions));
+
             if (string.IsNullOrEmpty(_options.ConnectionString))
             {
-                throw new ArgumentException("HSM connection string is required for Azure Key Vault", nameof(tlsOptions));
+                throw new ArgumentException("HSM connection string is required for Azure Key Vault", nameof(hsmOptions));
             }
 
             _vaultUrl = _options.ConnectionString;
-            
+
             _logger.LogInformation("Azure Key Vault HSM initialized with vault URL: {VaultUrl}", _vaultUrl);
         }
 
@@ -40,7 +40,7 @@ namespace ModelContextProtocol.Extensions.Security.HSM
                 throw new ArgumentException("Certificate identifier cannot be null or empty", nameof(identifier));
 
             var stopwatch = Stopwatch.StartNew();
-            
+
             try
             {
                 _logger.LogDebug("Retrieving certificate {Identifier} from Azure Key Vault", identifier);
@@ -76,7 +76,7 @@ namespace ModelContextProtocol.Extensions.Security.HSM
                 throw new ArgumentNullException(nameof(data));
 
             var stopwatch = Stopwatch.StartNew();
-            
+
             try
             {
                 _logger.LogDebug("Signing data with key {KeyIdentifier} using algorithm {Algorithm}", keyIdentifier, algorithm);
@@ -110,7 +110,7 @@ namespace ModelContextProtocol.Extensions.Security.HSM
                 throw new ArgumentNullException(nameof(data));
 
             var stopwatch = Stopwatch.StartNew();
-            
+
             try
             {
                 _logger.LogDebug("Encrypting data with key {KeyIdentifier} using algorithm {Algorithm}", keyIdentifier, algorithm);
@@ -140,7 +140,7 @@ namespace ModelContextProtocol.Extensions.Security.HSM
                 throw new ArgumentNullException(nameof(encryptedData));
 
             var stopwatch = Stopwatch.StartNew();
-            
+
             try
             {
                 _logger.LogDebug("Decrypting data with key {KeyIdentifier} using algorithm {Algorithm}", keyIdentifier, algorithm);
@@ -172,7 +172,7 @@ namespace ModelContextProtocol.Extensions.Security.HSM
                 throw new ArgumentNullException(nameof(signature));
 
             var stopwatch = Stopwatch.StartNew();
-            
+
             try
             {
                 _logger.LogDebug("Verifying signature with key {KeyIdentifier} using algorithm {Algorithm}", keyIdentifier, algorithm);
@@ -200,7 +200,7 @@ namespace ModelContextProtocol.Extensions.Security.HSM
                 throw new ArgumentException("Key name cannot be null or empty", nameof(keyName));
 
             var stopwatch = Stopwatch.StartNew();
-            
+
             try
             {
                 _logger.LogInformation("Generating {KeyType} key pair '{KeyName}' with size {KeySize} bits", keyType, keyName, keySize);
@@ -228,7 +228,7 @@ namespace ModelContextProtocol.Extensions.Security.HSM
                 throw new ArgumentException("Key identifier cannot be null or empty", nameof(keyIdentifier));
 
             var stopwatch = Stopwatch.StartNew();
-            
+
             try
             {
                 _logger.LogWarning("Deleting key {KeyIdentifier} from Azure Key Vault", keyIdentifier);
@@ -253,7 +253,7 @@ namespace ModelContextProtocol.Extensions.Security.HSM
         public async Task<string[]> ListKeysAsync(CancellationToken cancellationToken = default)
         {
             var stopwatch = Stopwatch.StartNew();
-            
+
             try
             {
                 _logger.LogDebug("Listing keys from Azure Key Vault");
@@ -281,7 +281,7 @@ namespace ModelContextProtocol.Extensions.Security.HSM
                 throw new ArgumentException("Key identifier cannot be null or empty", nameof(keyIdentifier));
 
             var stopwatch = Stopwatch.StartNew();
-            
+
             try
             {
                 _logger.LogDebug("Getting key info for {KeyIdentifier}", keyIdentifier);
@@ -306,7 +306,7 @@ namespace ModelContextProtocol.Extensions.Security.HSM
         public async Task<bool> TestConnectivityAsync(CancellationToken cancellationToken = default)
         {
             var stopwatch = Stopwatch.StartNew();
-            
+
             try
             {
                 _logger.LogDebug("Testing connectivity to Azure Key Vault");

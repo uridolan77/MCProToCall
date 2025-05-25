@@ -192,10 +192,10 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
     /// </summary>
     internal class HsmBuilder : IHsmBuilder
     {
-        private readonly HsmOptions _options;
+        private readonly ModelContextProtocol.Extensions.Security.HsmOptions _options;
         private readonly IServiceCollection _services;
 
-        public HsmBuilder(HsmOptions options, IServiceCollection services)
+        public HsmBuilder(ModelContextProtocol.Extensions.Security.HsmOptions options, IServiceCollection services)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _services = services ?? throw new ArgumentNullException(nameof(services));

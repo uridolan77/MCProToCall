@@ -33,7 +33,7 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
             }
 
             // Configure resilience options
-            services.Configure<ResilienceOptions>(configuration.GetSection("Resilience"));
+            services.Configure<ModelContextProtocol.Extensions.Resilience.ResilienceOptions>(configuration.GetSection("Resilience"));
             services.Configure<RateLimitOptions>(configuration.GetSection("RateLimit"));
 
             // Register rate limiters
@@ -73,7 +73,7 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
             })
             .AddHttpMessageHandler(sp =>
             {
-                var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ResilienceOptions>>().Value;
+                var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ModelContextProtocol.Extensions.Resilience.ResilienceOptions>>().Value;
                 var logger = sp.GetRequiredService<ILogger<ResilientHttpClientFactory>>();
 
                 // Create a delegating handler that applies the resilience policy

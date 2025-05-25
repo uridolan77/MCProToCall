@@ -15,7 +15,7 @@ namespace ModelContextProtocol.Extensions.Observability
         /// Activity source name for tracing
         /// </summary>
         public const string ActivitySourceName = "ModelContextProtocol";
-        
+
         /// <summary>
         /// Meter name for metrics
         /// </summary>
@@ -24,6 +24,11 @@ namespace ModelContextProtocol.Extensions.Observability
         private readonly ActivitySource _activitySource;
         private readonly Meter _meter;
         private readonly ILogger<McpTelemetry> _logger;
+
+        /// <summary>
+        /// Protected logger for derived classes
+        /// </summary>
+        protected ILogger<McpTelemetry> Logger => _logger;
 
         // Metrics
         private readonly Counter<long> _requestCounter;
@@ -81,7 +86,7 @@ namespace ModelContextProtocol.Extensions.Observability
         /// <inheritdoc/>
         public void RecordRequestReceived(string method)
         {
-            _requestCounter.Add(1, 
+            _requestCounter.Add(1,
                 new KeyValuePair<string, object>("method", method),
                 new KeyValuePair<string, object>("status", "received"));
 
@@ -92,7 +97,7 @@ namespace ModelContextProtocol.Extensions.Observability
         public void RecordRequestCompleted(string method, bool success, double durationMs)
         {
             var status = success ? "success" : "failure";
-            
+
             _requestCounter.Add(1,
                 new KeyValuePair<string, object>("method", method),
                 new KeyValuePair<string, object>("status", "completed"),
@@ -102,7 +107,7 @@ namespace ModelContextProtocol.Extensions.Observability
                 new KeyValuePair<string, object>("method", method),
                 new KeyValuePair<string, object>("status", status));
 
-            _logger.LogInformation("MCP request completed: {Method} [{Status}] in {Duration}ms", 
+            _logger.LogInformation("MCP request completed: {Method} [{Status}] in {Duration}ms",
                 method, status, durationMs);
         }
 
@@ -132,7 +137,7 @@ namespace ModelContextProtocol.Extensions.Observability
                 _activeConnections.Add(-1);
             }
 
-            _logger.LogInformation("Connection event: {EventType} for client {ClientId}", 
+            _logger.LogInformation("Connection event: {EventType} for client {ClientId}",
                 eventType, clientId);
         }
 
