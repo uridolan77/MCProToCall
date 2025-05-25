@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Concurrent;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -10,7 +11,7 @@ namespace ModelContextProtocol.Extensions.Resilience
     /// <summary>
     /// Adaptive rate limiter that adjusts limits based on system performance and error rates
     /// </summary>
-    public class AdaptiveRateLimiter : IDisposable
+    public class AdaptiveRateLimiter : IRateLimiter, IDisposable
     {
         private readonly ILogger<AdaptiveRateLimiter> _logger;        private readonly AdaptiveRateLimitOptions _options;
         private readonly ConcurrentDictionary<string, ClientMetrics> _clientMetrics;
@@ -33,13 +34,55 @@ namespace ModelContextProtocol.Extensions.Resilience
             _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
             _clientMetrics = new ConcurrentDictionary<string, ClientMetrics>();
             _currentLimit = _options.InitialLimit;
-            
+
             // Start adjustment timer
-            _adjustmentTimer = new Timer(AdjustLimits, null, 
+            _adjustmentTimer = new Timer(AdjustLimits, null,
                 _options.AdjustmentInterval, _options.AdjustmentInterval);
-                
-            _logger.LogInformation("Adaptive rate limiter initialized with initial limit: {InitialLimit}", 
+
+            _logger.LogInformation("Adaptive rate limiter initialized with initial limit: {InitialLimit}",
                 _options.InitialLimit);
+        }
+
+        /// <summary>
+        /// Gets the current number of available permits
+        /// </summary>
+        public int AvailablePermits => Math.Max(0, _currentLimit - _clientMetrics.Values.Sum(m => m.RequestTimes.Count));
+
+        /// <summary>
+        /// Gets the maximum number of permits
+        /// </summary>
+        public int MaxPermits => _currentLimit;
+
+        /// <summary>
+        /// Gets the current rate limit in permits per second
+        /// </summary>
+        public double PermitsPerSecond => _currentLimit / _options.TimeWindow.TotalSeconds;
+
+        /// <summary>
+        /// Tries to acquire a permit from the rate limiter
+        /// </summary>
+        /// <param name="cancellationToken">Cancellation token</param>
+        /// <returns>True if a permit was acquired, false otherwise</returns>
+        public async Task<bool> TryAcquireAsync(CancellationToken cancellationToken = default)
+        {
+            var result = await IsAllowedAsync("default", cancellationToken);
+            return result.IsAllowed;
+        }
+
+        /// <summary>
+        /// Acquires a permit from the rate limiter, waiting if necessary
+        /// </summary>
+        /// <param name="cancellationToken">Cancellation token</param>
+        /// <returns>A task that completes when a permit is acquired</returns>
+        public async Task AcquireAsync(CancellationToken cancellationToken = default)
+        {
+            while (true)
+            {
+                if (await TryAcquireAsync(cancellationToken))
+                    return;
+
+                await Task.Delay(100, cancellationToken); // Wait 100ms before retrying
+            }
         }
 
         /// <summary>
@@ -62,9 +105,9 @@ namespace ModelContextProtocol.Extensions.Resilience
                 var currentCount = metrics.RequestTimes.Count;
                 if (currentCount >= _currentLimit)
                 {
-                    _logger.LogDebug("Rate limit exceeded for client {ClientId}: {CurrentCount}/{CurrentLimit}", 
+                    _logger.LogDebug("Rate limit exceeded for client {ClientId}: {CurrentCount}/{CurrentLimit}",
                         clientId, currentCount, _currentLimit);
-                    
+
                     return new RateLimitResult
                     {
                         IsAllowed = false,
@@ -76,7 +119,7 @@ namespace ModelContextProtocol.Extensions.Resilience
 
                 // Allow request and track it
                 metrics.RequestTimes.Add(now);
-                
+
                 return new RateLimitResult
                 {
                     IsAllowed = true,
@@ -96,7 +139,7 @@ namespace ModelContextProtocol.Extensions.Resilience
                 return;
 
             var metrics = _clientMetrics.GetOrAdd(clientId, _ => new ClientMetrics());
-            
+
             lock (metrics.Lock)
             {
                 metrics.TotalRequests++;
@@ -104,9 +147,9 @@ namespace ModelContextProtocol.Extensions.Resilience
                 {
                     metrics.ErrorCount++;
                 }
-                
+
                 metrics.TotalResponseTime += responseTime;
-                
+
                 // Update global metrics for adjustment
                 UpdateGlobalMetrics(wasSuccessful, responseTime);
             }
@@ -153,7 +196,7 @@ namespace ModelContextProtocol.Extensions.Resilience
                 {
                     var previousLimit = _currentLimit;
                     var newLimit = CalculateNewLimit();
-                    
+
                     if (newLimit != _currentLimit)
                     {
                         _currentLimit = newLimit;
@@ -179,7 +222,7 @@ namespace ModelContextProtocol.Extensions.Resilience
             // Decrease limit if error rate is too high
             if (_currentErrorRate > _options.ErrorRateThreshold)
             {
-                var decreaseFactor = Math.Min(_options.MaxDecreaseFactor, 
+                var decreaseFactor = Math.Min(_options.MaxDecreaseFactor,
                     1.0 + (_currentErrorRate - _options.ErrorRateThreshold) * 2);
                 newLimit = (int)Math.Max(_options.MinLimit, _currentLimit / decreaseFactor);
             }            // Decrease limit if response time is too high
@@ -189,7 +232,7 @@ namespace ModelContextProtocol.Extensions.Resilience
                     1.0 + (CurrentResponseTime.TotalMilliseconds - _options.ResponseTimeThresholdMs) / _options.ResponseTimeThresholdMs);
                 newLimit = (int)Math.Max(_options.MinLimit, _currentLimit / decreaseFactor);
             }            // Increase limit if system is performing well
-            else if (_currentErrorRate < _options.ErrorRateThreshold * 0.5 && 
+            else if (_currentErrorRate < _options.ErrorRateThreshold * 0.5 &&
                      CurrentResponseTime.TotalMilliseconds < _options.ResponseTimeThresholdMs * 0.8)
             {
                 newLimit = (int)Math.Min(_options.MaxLimit, _currentLimit * _options.IncreaseFactor);
@@ -204,7 +247,7 @@ namespace ModelContextProtocol.Extensions.Resilience
         private void CleanupOldEntries(ClientMetrics metrics, DateTime now)
         {
             var cutoff = now.Subtract(_options.TimeWindow);
-            
+
             for (int i = metrics.RequestTimes.Count - 1; i >= 0; i--)
             {
                 if (metrics.RequestTimes[i] < cutoff)
@@ -224,7 +267,7 @@ namespace ModelContextProtocol.Extensions.Resilience
 
             var oldestRequest = metrics.RequestTimes[0];
             var retryAfter = oldestRequest.Add(_options.TimeWindow).Subtract(now);
-            
+
             return retryAfter > TimeSpan.Zero ? retryAfter : TimeSpan.FromSeconds(1);
         }
 
@@ -245,7 +288,7 @@ namespace ModelContextProtocol.Extensions.Resilience
 
             var totalRequests = 0;
             var totalErrors = 0;
-            
+
             foreach (var kvp in _clientMetrics)
             {
                 var metrics = kvp.Value;
@@ -268,7 +311,7 @@ namespace ModelContextProtocol.Extensions.Resilience
         public void ResetMetrics()
         {
             _logger.LogInformation("Resetting adaptive rate limiter metrics");
-            
+
             foreach (var kvp in _clientMetrics)
             {
                 var metrics = kvp.Value;
@@ -295,7 +338,7 @@ namespace ModelContextProtocol.Extensions.Resilience
             _adjustmentTimer?.Dispose();
             _clientMetrics.Clear();
             _disposed = true;
-            
+
             _logger.LogDebug("AdaptiveRateLimiter disposed");
         }
     }

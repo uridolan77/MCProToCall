@@ -149,24 +149,5 @@ namespace ModelContextProtocol.Extensions.Resilience
         }
     }
 
-    /// <summary>
-    /// Options for configuring rate limiting
-    /// </summary>
-    public class RateLimitOptions
-    {
-        /// <summary>
-        /// Maximum number of tokens in the bucket
-        /// </summary>
-        public int BucketCapacity { get; set; } = 60;
 
-        /// <summary>
-        /// Rate at which tokens are refilled (tokens per second)
-        /// </summary>
-        public double RefillRate { get; set; } = 10;
-
-        /// <summary>
-        /// Size of the sliding window in milliseconds
-        /// </summary>
-        public int WindowSizeMs { get; set; } = 60000; // 1 minute
-    }
 }

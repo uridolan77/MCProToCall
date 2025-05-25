@@ -10,6 +10,10 @@ using ModelContextProtocol.Extensions.Observability;
 using ModelContextProtocol.Extensions.Configuration;
 using ModelContextProtocol.Extensions.Validation;
 using ModelContextProtocol.Extensions.Testing;
+using ModelContextProtocol.Extensions.Factories;
+using ModelContextProtocol.Extensions.Performance;
+using ModelContextProtocol.Extensions.Testing.Chaos;
+using ModelContextProtocol.Extensions.WebSocket;
 using System;
 using System.ComponentModel.DataAnnotations;
 
@@ -45,7 +49,11 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
                 .AddMcpResilience(configuration, options.Resilience)
                 .AddMcpObservability(configuration, options.Observability)
                 .AddMcpConfiguration(configuration, options.Configuration)
-                .AddMcpValidation(configuration, options.Validation);
+                .AddMcpValidation(configuration, options.Validation)
+                .AddMcpFactories()
+                .AddMcpPerformance(configuration)
+                .AddMcpWebSocket(configuration)
+                .AddMcpChaos(configuration);
         }
 
         /// <summary>
@@ -74,7 +82,8 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
                 services.AddSingleton<IHardwareSecurityModuleFactory>(provider =>
                     new HardwareSecurityModuleFactory(
                         provider.GetRequiredService<ILogger<HardwareSecurityModuleFactory>>(),
-                        provider.GetRequiredService<IOptionsMonitor<ModelContextProtocol.Extensions.Security.HSM.HsmOptions>>()));
+                        provider.GetRequiredService<IOptionsMonitor<ModelContextProtocol.Extensions.Security.HSM.HsmOptions>>(),
+                        provider));
 
                 services.AddScoped<IHardwareSecurityModule>(provider =>
                 {
@@ -185,6 +194,94 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
             {
                 // Schema registry is static, no need to register
             }
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds factory services for creating components
+        /// </summary>
+        public static IServiceCollection AddMcpFactories(this IServiceCollection services)
+        {
+            services.AddSingleton<RateLimiterFactory>();
+            services.AddSingleton<CircuitBreakerFactory>();
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds performance monitoring services
+        /// </summary>
+        public static IServiceCollection AddMcpPerformance(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            services.Configure<PerformanceProfilerOptions>(
+                configuration.GetSection("McpExtensions:Performance"));
+
+            services.AddSingleton<PerformanceProfiler>();
+            services.AddSingleton<MessageProcessor>();
+            services.AddSingleton<OptimizedJsonProcessor>();
+            services.AddSingleton<MessagePackProcessor>();
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds WebSocket services with queuing support
+        /// </summary>
+        public static IServiceCollection AddMcpWebSocket(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            services.Configure<QueuedWebSocketOptions>(
+                configuration.GetSection("McpExtensions:WebSocket"));
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds chaos engineering services for testing
+        /// </summary>
+        public static IServiceCollection AddMcpChaos(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            services.Configure<ChaosOptions>(
+                configuration.GetSection("McpExtensions:Chaos"));
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds enhanced configuration tracking
+        /// </summary>
+        public static IServiceCollection AddMcpConfigurationTracking(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            services.Configure<ConfigurationChangeTrackerOptions>(
+                configuration.GetSection("McpExtensions:ConfigurationTracking"));
+
+            services.AddSingleton<ConfigurationChangeTracker>();
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds zero-trust security pipeline
+        /// </summary>
+        public static IServiceCollection AddMcpZeroTrustSecurity(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            services.AddSingleton<ZeroTrustSecurityPipeline>();
+
+            // Register default security validators
+            services.AddScoped<ISecurityValidator, AuthenticationValidator>();
+            services.AddScoped<ISecurityValidator, AuthorizationValidator>();
+            services.AddScoped<ISecurityValidator, RateLimitValidator>();
+            services.AddScoped<ISecurityValidator, InputValidationValidator>();
 
             return services;
         }

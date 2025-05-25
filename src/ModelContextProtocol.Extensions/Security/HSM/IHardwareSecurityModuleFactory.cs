@@ -19,35 +19,7 @@ namespace ModelContextProtocol.Extensions.Security.HSM
         IHardwareSecurityModule Create(string providerType);
     }
 
-    /// <summary>
-    /// Factory implementation for hardware security modules
-    /// </summary>
-    public class HardwareSecurityModuleFactory : IHardwareSecurityModuleFactory
-    {
-        private readonly ILogger<HardwareSecurityModuleFactory> _logger;
-        private readonly IOptionsMonitor<HsmOptions> _options;
 
-        public HardwareSecurityModuleFactory(
-            ILogger<HardwareSecurityModuleFactory> logger,
-            IOptionsMonitor<HsmOptions> options)
-        {
-            _logger = logger;
-            _options = options;
-        }
-
-        public IHardwareSecurityModule Create(string providerType)
-        {
-            _logger.LogInformation("Creating HSM provider of type: {ProviderType}", providerType);
-
-            return providerType switch
-            {
-                "AzureKeyVault" => throw new NotImplementedException("AzureKeyVault HSM implementation pending"),
-                "PKCS11" => throw new NotImplementedException("PKCS11 HSM implementation pending"),
-                "LocalCertStore" => throw new NotImplementedException("LocalCertStore HSM implementation pending"),
-                _ => throw new NotSupportedException($"HSM provider '{providerType}' is not supported")
-            };
-        }
-    }
 
     /// <summary>
     /// Configuration options for HSM
