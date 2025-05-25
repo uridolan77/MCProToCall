@@ -308,5 +308,159 @@ namespace ModelContextProtocol.Extensions.DependencyInjection
 
             return services;
         }
+
+        /// <summary>
+        /// Adds advanced caching features including cache warming and analytics
+        /// </summary>
+        public static IServiceCollection AddMcpAdvancedCaching(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            // Add cache warming service
+            services.AddSingleton<ModelContextProtocol.Extensions.Caching.ICacheWarmingService,
+                ModelContextProtocol.Extensions.Caching.CacheWarmingService>();
+
+            // Add cache analytics
+            services.AddSingleton<ModelContextProtocol.Extensions.Caching.ICacheAnalyticsService,
+                ModelContextProtocol.Extensions.Caching.CacheAnalyticsService>();
+
+            // Add predictive cache warming strategies
+            services.AddTransient<ModelContextProtocol.Extensions.Caching.IPredictiveCacheWarmingStrategy,
+                ModelContextProtocol.Extensions.Caching.PredictiveCacheWarmingStrategy>();
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds advanced protocol management and message routing
+        /// </summary>
+        public static IServiceCollection AddMcpAdvancedProtocol(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            // Add protocol version management
+            services.AddSingleton<ModelContextProtocol.Extensions.Protocol.IProtocolVersionManager,
+                ModelContextProtocol.Extensions.Protocol.ProtocolVersionManager>();
+
+            // Add adaptive protocol handler
+            services.AddSingleton<ModelContextProtocol.Extensions.Protocol.IAdaptiveProtocolHandler,
+                ModelContextProtocol.Extensions.Protocol.AdaptiveProtocolHandler>();
+
+            // Add message routing
+            services.AddSingleton<ModelContextProtocol.Extensions.Protocol.IMessageRouter,
+                ModelContextProtocol.Extensions.Protocol.MessageRouter>();
+
+            // Add message transformation pipeline
+            services.AddSingleton<ModelContextProtocol.Extensions.Protocol.IMessageTransformationPipeline,
+                ModelContextProtocol.Extensions.Protocol.MessageTransformationPipeline>();
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds intelligent resource management with adaptive pooling
+        /// </summary>
+        public static IServiceCollection AddMcpIntelligentResourceManagement(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            // Add adaptive resource pools
+            services.AddSingleton(typeof(ModelContextProtocol.Extensions.Performance.IAdaptiveResourcePool<>),
+                typeof(ModelContextProtocol.Extensions.Performance.AdaptiveResourcePool<>));
+
+            // Add resource quota manager
+            services.AddSingleton<ModelContextProtocol.Extensions.Performance.IResourceQuotaManager,
+                ModelContextProtocol.Extensions.Performance.ResourceQuotaManager>();
+
+            // Add predictive models for resource scaling
+            services.AddTransient<ModelContextProtocol.Extensions.Performance.IPredictiveModel,
+                ModelContextProtocol.Extensions.Performance.ResourceDemandPredictionModel>();
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds stream processing and real-time data capabilities
+        /// </summary>
+        public static IServiceCollection AddMcpStreamProcessing(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            // Add stream processor
+            services.AddSingleton<ModelContextProtocol.Extensions.Streaming.IStreamProcessor,
+                ModelContextProtocol.Extensions.Streaming.StreamProcessor>();
+
+            // Add real-time data aggregator
+            services.AddSingleton<ModelContextProtocol.Extensions.Streaming.IRealTimeDataAggregator,
+                ModelContextProtocol.Extensions.Streaming.RealTimeDataAggregator>();
+
+            // Add event store
+            services.AddSingleton<ModelContextProtocol.Extensions.Streaming.IEventStore,
+                ModelContextProtocol.Extensions.Streaming.EventStore>();
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds feature flag management and gradual rollouts
+        /// </summary>
+        public static IServiceCollection AddMcpFeatureManagement(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            // Add feature flag service
+            services.AddSingleton<ModelContextProtocol.Extensions.Features.IFeatureFlagService,
+                ModelContextProtocol.Extensions.Features.FeatureFlagService>();
+
+            // Add gradual rollout manager
+            services.AddSingleton<ModelContextProtocol.Extensions.Features.IGradualRolloutManager,
+                ModelContextProtocol.Extensions.Features.GradualRolloutManager>();
+
+            // Add default feature flag providers
+            services.AddTransient<ModelContextProtocol.Extensions.Features.IFeatureFlagProvider,
+                ModelContextProtocol.Extensions.Features.ConfigurationFeatureFlagProvider>();
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds advanced observability with anomaly detection
+        /// </summary>
+        public static IServiceCollection AddMcpAdvancedObservability(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            // Add anomaly detection service
+            services.AddSingleton<ModelContextProtocol.Extensions.Observability.IAnomalyDetectionService,
+                ModelContextProtocol.Extensions.Observability.AnomalyDetectionService>();
+
+            // Add business metrics correlator
+            services.AddSingleton<ModelContextProtocol.Extensions.Observability.IBusinessMetricsCorrelator,
+                ModelContextProtocol.Extensions.Observability.BusinessMetricsCorrelator>();
+
+            // Add anomaly detectors
+            services.AddTransient<ModelContextProtocol.Extensions.Observability.IAnomalyDetector,
+                ModelContextProtocol.Extensions.Observability.StatisticalAnomalyDetector>();
+            services.AddTransient<ModelContextProtocol.Extensions.Observability.IAnomalyDetector,
+                ModelContextProtocol.Extensions.Observability.MachineLearningAnomalyDetector>();
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds all advanced MCP extensions
+        /// </summary>
+        public static IServiceCollection AddMcpAdvancedExtensions(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            return services
+                .AddMcpAdvancedCaching(configuration)
+                .AddMcpAdvancedProtocol(configuration)
+                .AddMcpIntelligentResourceManagement(configuration)
+                .AddMcpStreamProcessing(configuration)
+                .AddMcpFeatureManagement(configuration)
+                .AddMcpAdvancedObservability(configuration);
+        }
     }
 }
